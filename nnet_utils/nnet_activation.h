@@ -42,6 +42,8 @@ struct activ_config
     
     // Internal data type definitions    
     typedef ap_fixed<18,8> table_t;
+    //Activation type	
+    static const unsigned activation_type = nnet::activ_relu;
 };
 
 // *************************************************

@@ -16,25 +16,32 @@
 //    You should have received a copy of the GNU General Public License
 //    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
+#include <fstream>
+#include <iostream>
+#include <stdio.h>
+#include <stdlib.h>
+#include <math.h>
 
-#ifndef NNET_COMMON_H_
-#define NNET_COMMON_H_
+#include "firmware/parameters.h"
+#include "firmware/myproject.h"
+#include "nnet_helpers.h"
 
-#include "ap_fixed.h"
 
-namespace nnet {
+int main(int argc, char **argv)
+{
 
-// Common type definitions
-enum io_type {io_parallel = 0, io_serial};
+  //hls-fpga-machine-learning insert data
+  input_t  data_str[N_LOOP][N_INPUTS] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
 
-// Activation enum
-enum activ_type {activ_relu = 0, activ_sigmoid, activ_tanh, activ_softmax};
 
-// Default data types (??) TODO: Deprecate
-typedef ap_fixed<16,4>  weight_t_def;
-typedef ap_fixed<16,4>  bias_t_def;
-typedef ap_fixed<32,10> accum_t_def;
-
+  result_t res_str[N_OUTPUTS] = {0};
+  unsigned short size_in, size_out;
+  myproject(data_str, res_str, size_in, size_out);
+    
+  for(int i=0; i<N_OUTPUTS; i++){
+    std::cout << res_str[i] << " ";
+  }
+  std::cout << std::endl;
+  
+  return 0;
 }
-
-#endif

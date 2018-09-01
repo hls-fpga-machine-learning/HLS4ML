@@ -17,24 +17,32 @@
 //    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
-#ifndef NNET_COMMON_H_
-#define NNET_COMMON_H_
+#ifndef MYPROJECT_H_
+#define MYPROJECT_H_
 
+#include <complex>
+#include "ap_int.h"
 #include "ap_fixed.h"
 
-namespace nnet {
+#include "parameters.h"
 
-// Common type definitions
-enum io_type {io_parallel = 0, io_serial};
 
-// Activation enum
-enum activ_type {activ_relu = 0, activ_sigmoid, activ_tanh, activ_softmax};
+// Prototype of top level function for C-synthesis
+void myproject(
+      input_t data[N_LOOP][N_INPUTS],
+      result_t res[N_OUTPUTS],
+      unsigned short &const_size_in,
+      unsigned short &const_size_out);
 
-// Default data types (??) TODO: Deprecate
-typedef ap_fixed<16,4>  weight_t_def;
-typedef ap_fixed<16,4>  bias_t_def;
-typedef ap_fixed<32,10> accum_t_def;
-
-}
+void lstm_matrixmult_1 ( 
+          input_t  data              [N_INPUTS],
+          input_t  data_recurr       [N_STATE_1],
+          layer1_t logits1     [N_STATE_1*4],
+          layer1_t logitsnob1  [N_STATE_1*4],
+          weight_default_t W1   [N_INPUTS*N_STATE_1*4],
+          weight_default_t Wr1  [N_STATE_1*N_STATE_1*4],
+          weight_default_t b1   [N_STATE_1*4]); 
+void compute_layer2(layer1_t layer1_out[N_LAYER_1], result_t logits2[N_OUTPUTS]);
 
 #endif
+

@@ -1,0 +1,166 @@
+{
+    "backend": "tensorflow",
+    "class_name": "Model",
+    "config": {
+        "input_layers": [
+            [
+                "input_1",
+                0,
+                0
+            ]
+        ],
+        "layers": [
+            {
+                "class_name": "InputLayer",
+                "config": {
+                    "batch_input_shape": [
+                        null,
+                        20,
+                        6
+                    ],
+                    "dtype": "float32",
+                    "name": "input_1",
+                    "sparse": false
+                },
+                "inbound_nodes": [],
+                "name": "input_1"
+            },
+            {
+                "class_name": "LSTM",
+                "config": {
+                    "activation": "relu",
+                    "activity_regularizer": null,
+                    "bias_constraint": null,
+                    "bias_initializer": {
+                        "class_name": "Zeros",
+                        "config": {}
+                    },
+                    "bias_regularizer": null,
+                    "dropout": 0.0,
+                    "go_backwards": false,
+                    "implementation": 1,
+                    "kernel_constraint": null,
+                    "kernel_initializer": {
+                        "class_name": "VarianceScaling",
+                        "config": {
+                            "distribution": "uniform",
+                            "mode": "fan_in",
+                            "scale": 1.0,
+                            "seed": null
+                        }
+                    },
+                    "kernel_regularizer": {
+                        "class_name": "L1L2",
+                        "config": {
+                            "l1": 9.999999747378752e-05,
+                            "l2": 0.0
+                        }
+                    },
+                    "name": "lstm_lstm",
+                    "recurrent_activation": "sigmoid",
+                    "recurrent_constraint": null,
+                    "recurrent_dropout": 0.0,
+                    "recurrent_initializer": {
+                        "class_name": "Orthogonal",
+                        "config": {
+                            "gain": 1.0,
+                            "seed": null
+                        }
+                    },
+                    "recurrent_regularizer": {
+                        "class_name": "L1L2",
+                        "config": {
+                            "l1": 0.0010000000474974513,
+                            "l2": 0.0
+                        }
+                    },
+                    "return_sequences": true,
+                    "return_state": false,
+                    "stateful": false,
+                    "trainable": true,
+                    "unit_forget_bias": true,
+                    "units": 16,
+                    "unroll": false,
+                    "use_bias": true
+                },
+                "inbound_nodes": [
+                    [
+                        [
+                            "input_1",
+                            0,
+                            0,
+                            {}
+                        ]
+                    ]
+                ],
+                "name": "lstm_lstm"
+            },
+            {
+                "class_name": "Flatten",
+                "config": {
+                    "name": "flatten_1",
+                    "trainable": true
+                },
+                "inbound_nodes": [
+                    [
+                        [
+                            "lstm_lstm",
+                            0,
+                            0,
+                            {}
+                        ]
+                    ]
+                ],
+                "name": "flatten_1"
+            },
+            {
+                "class_name": "Dense",
+                "config": {
+                    "activation": "softmax",
+                    "activity_regularizer": null,
+                    "bias_constraint": null,
+                    "bias_initializer": {
+                        "class_name": "Zeros",
+                        "config": {}
+                    },
+                    "bias_regularizer": null,
+                    "kernel_constraint": null,
+                    "kernel_initializer": {
+                        "class_name": "VarianceScaling",
+                        "config": {
+                            "distribution": "uniform",
+                            "mode": "fan_in",
+                            "scale": 1.0,
+                            "seed": null
+                        }
+                    },
+                    "kernel_regularizer": null,
+                    "name": "rnn_densef",
+                    "trainable": true,
+                    "units": 5,
+                    "use_bias": true
+                },
+                "inbound_nodes": [
+                    [
+                        [
+                            "flatten_1",
+                            0,
+                            0,
+                            {}
+                        ]
+                    ]
+                ],
+                "name": "rnn_densef"
+            }
+        ],
+        "name": "model_1",
+        "output_layers": [
+            [
+                "rnn_densef",
+                0,
+                0
+            ]
+        ]
+    },
+    "keras_version": "2.1.3"
+}

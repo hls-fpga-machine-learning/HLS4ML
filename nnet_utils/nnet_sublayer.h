@@ -150,8 +150,172 @@ template<class data_T, int NIN1, int NIN2>
         res[NIN1+ii] = data2[ii];
     }
 }
+//Same as above but with more options
+template<class data_T, class res_T, unsigned int nin, unsigned int nout, unsigned int nsubout, unsigned int isubout, typename CONFIG_T>
+void matrixmultsub_Wb(
+    data_T    data[nin],
+    res_T     res[nsubout],
+    typename CONFIG_T::weight_t  weights[nin*nout],
+    typename CONFIG_T::bias_t    biases[nout])
+{
+    data_T cache;
+    typename CONFIG_T::accum_t mult[nin*nsubout];
+    typename CONFIG_T::accum_t acc[nsubout];
 
+    // Use a function_instantiate in case it helps to explicitly optimize unchanging weights/biases
+    #pragma HLS function_instantiate variable=weights,biases
 
+    if (CONFIG_T::io_type == io_parallel){
+        // For parallel inputs:
+        //   - completely partition arrays -- target fabric
+        //   - if we have an unroll factor, limit number of multipliers
+        #pragma HLS PIPELINE II=CONFIG_T::reuse_factor
+
+        // #pragma HLS ARRAY_PARTITION variable=weights complete // remove this line for now, it breaks compression sometimes
+        #pragma HLS ARRAY_PARTITION variable=biases complete
+        #pragma HLS ARRAY_PARTITION variable=mult complete
+        #pragma HLS ARRAY_PARTITION variable=acc complete
+  
+        //int multiplier_limit  = ceil(float(CONFIG_T::n_in*CONFIG_T::n_out) / float(CONFIG_T::reuse_factor*CONFIG_T::n_part)) - floor(float(CONFIG_T::n_zeros) / float(CONFIG_T::reuse_factor*CONFIG_T::n_part));
+        int multiplier_limit = ceil(float(nin*nsubout) / float(CONFIG_T::reuse_factor)); // ignoring pruning for now
+        #pragma HLS ALLOCATION instances=mul limit=multiplier_limit operation
+
+    } else if (CONFIG_T::io_type == io_serial){
+        #pragma HLS ARRAY_RESHAPE variable=weights complete dim=1
+        #pragma HLS ARRAY_PARTITION variable=mult complete dim=1
+        #pragma HLS ARRAY_PARTITION variable=acc complete dim=1
+        #pragma HLS DATAFLOW
+        #pragma HLS STREAM variable=mult depth=1
+        #pragma HLS STREAM variable=acc depth=1
+    }
+    
+    // Do the matrix-multiply
+    Product1: for(int ii = 0; ii < nin; ii++) {
+        if (CONFIG_T::io_type == io_serial){
+            #pragma HLS PIPELINE
+        }
+        cache = data[ii];
+        Product2: for(int jj = 0; jj < nsubout; jj++) {
+            if (CONFIG_T::io_type == io_serial) {
+                int multiplier_limit  = ceil(float(nout) / float(CONFIG_T::reuse_factor*ceil(nout/nsubout)));
+                #pragma HLS ALLOCATION instances=mul limit=multiplier_limit operation
+            }
+	    int weight_index = ii*nout+jj+isubout;
+	    int mult_index   = ii*nsubout+jj;
+	    mult[mult_index] = cache * weights[weight_index];
+        }
+    }
+
+    // Initialize accumulator with input biases
+    ResetAccum: for(int iacc = 0; iacc < nsubout; iacc++) {
+        if (CONFIG_T::io_type == io_serial){
+            #pragma HLS UNROLL
+        }
+	int bias_index = iacc+isubout;
+        acc[iacc] = (typename CONFIG_T::accum_t) biases[bias_index];
+    }
+
+    // Accumulate multiplication result
+    Accum1: for(int ii = 0; ii < nin; ii++) {
+        if (CONFIG_T::io_type == io_serial){
+            #pragma HLS PIPELINE
+        }
+        Accum2: for(int jj = 0; jj < nsubout; jj++) {
+	    int index = ii*nsubout+jj;
+	    acc[jj] += mult[index];
+        }
+    }
+
+    // Cast to "res_t" type
+    Result: for(int ires = 0; ires < nsubout; ires++){
+        if (CONFIG_T::io_type == io_serial){
+            #pragma HLS UNROLL
+        }
+        res[ires] = (res_T) (acc[ires]);
+    }    
+}
+
+template<class data_T, class res_T, unsigned int nin, unsigned int nout, unsigned int nsubout, unsigned int isubout, typename CONFIG_T>
+void matrixmultsub_W(
+    data_T    data[nin],
+    res_T     res[nsubout],
+    typename CONFIG_T::weight_t  weights[nin*nout])
+{
+    data_T cache;
+    typename CONFIG_T::accum_t mult[nin*nsubout];
+    typename CONFIG_T::accum_t acc[nsubout];
+
+    // Use a function_instantiate in case it helps to explicitly optimize unchanging weights/biases
+    #pragma HLS function_instantiate variable=weights
+
+    if (CONFIG_T::io_type == io_parallel){
+        // For parallel inputs:
+        //   - completely partition arrays -- target fabric
+        //   - if we have an unroll factor, limit number of multipliers
+        #pragma HLS PIPELINE II=CONFIG_T::reuse_factor
+
+        // #pragma HLS ARRAY_PARTITION variable=weights complete // remove this line for now, it breaks compression sometimes
+        #pragma HLS ARRAY_PARTITION variable=mult complete
+        #pragma HLS ARRAY_PARTITION variable=acc complete
+  
+        //int multiplier_limit  = ceil(float(CONFIG_T::n_in*CONFIG_T::n_out) / float(CONFIG_T::reuse_factor*CONFIG_T::n_part)) - floor(float(CONFIG_T::n_zeros) / float(CONFIG_T::reuse_factor*CONFIG_T::n_part));
+        int multiplier_limit = ceil(float(nin*nsubout) / float(CONFIG_T::reuse_factor)); // ignoring pruning for now
+        #pragma HLS ALLOCATION instances=mul limit=multiplier_limit operation
+
+    } else if (CONFIG_T::io_type == io_serial){
+        #pragma HLS ARRAY_RESHAPE variable=weights complete dim=1
+        #pragma HLS ARRAY_PARTITION variable=mult complete dim=1
+        #pragma HLS ARRAY_PARTITION variable=acc complete dim=1
+        #pragma HLS DATAFLOW
+        #pragma HLS STREAM variable=mult depth=1
+        #pragma HLS STREAM variable=acc depth=1
+    }
+    
+    // Do the matrix-multiply
+    Product1: for(int ii = 0; ii < nin; ii++) {
+        if (CONFIG_T::io_type == io_serial){
+            #pragma HLS PIPELINE
+        }
+        cache = data[ii];
+        Product2: for(int jj = 0; jj < nsubout; jj++) {
+            if (CONFIG_T::io_type == io_serial) {
+                int multiplier_limit  = ceil(float(nout) / float(CONFIG_T::reuse_factor*ceil(nout/nsubout)));
+                #pragma HLS ALLOCATION instances=mul limit=multiplier_limit operation
+            }
+	    int weight_index = ii*nout+jj+isubout;
+	    int mult_index   = ii*nsubout+jj;
+	    mult[mult_index] = cache * weights[weight_index];
+        }
+    }
+
+    // Initialize accumulator with input biases
+    ResetAccum: for(int iacc = 0; iacc < nsubout; iacc++) {
+        if (CONFIG_T::io_type == io_serial){
+            #pragma HLS UNROLL
+        }
+	int bias_index = iacc+isubout;
+        acc[iacc] = 0;
+    }
+
+    // Accumulate multiplication result
+    Accum1: for(int ii = 0; ii < nin; ii++) {
+        if (CONFIG_T::io_type == io_serial){
+            #pragma HLS PIPELINE
+        }
+        Accum2: for(int jj = 0; jj < nsubout; jj++) {
+	    int index = ii*nsubout+jj;
+	    acc[jj] += mult[index];
+        }
+    }
+
+    // Cast to "res_t" type
+    Result: for(int ires = 0; ires < nsubout; ires++){
+        if (CONFIG_T::io_type == io_serial){
+            #pragma HLS UNROLL
+        }
+        res[ires] = (res_T) (acc[ires]);
+    }    
+}
 
 
 }//end namespace

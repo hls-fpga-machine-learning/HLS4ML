@@ -28,16 +28,24 @@ def hls_writer(layer_list, yamlConfig):
             newline = line.replace('input_t data[N_INPUTS]','input_t data[Y_INPUTS_1][N_CHAN_1]')
         elif 'input_t data[N_INPUTS]' in line and layer_list[0]['class_name']=='Conv2D':
             newline = line.replace('input_t data[N_INPUTS]','input_t data[IN_HEIGHT_1][IN_WIDTH_1][N_CHAN_1]')
+        elif 'input_t data[N_INPUTS]' in line and (layer_list[0]['class_name']=='LSTM' or layer_list[0]['class_name']=='GRU'):
+            newline = line.replace('input_t data[N_INPUTS]','input_t data[N_LOOP][N_INPUTS]')
         elif 'const_size_in   = N_INPUTS' in line and layer_list[0]['class_name']=='Conv1D':
             newline = line.replace('const_size_in   = N_INPUTS','const_size_in   = Y_INPUTS_1*N_CHAN_1')
         elif 'const_size_in   = N_INPUTS' in line and layer_list[0]['class_name']=='Conv2D':
             newline = line.replace('const_size_in   = N_INPUTS','const_size_in   = IN_HEIGHT_1*IN_WIDTH_1*N_CHAN_1')
+        elif 'const_size_in   = N_INPUTS' in line and (layer_list[0]['class_name']=='LSTM' or layer_list[0]['class_name']=='GRU'):
+            newline = line.replace('const_size_in   = N_INPUTS','const_size_in   = N_INPUTS*N_LOOP')
         elif '//hls-fpga-machine-learning insert weights' in line:
             newline = line
             for i in range(1,len(layer_list)+1):
                 newline += '#include "weights/w{}.h"\n'.format(i)
                 newline += '#include "weights/b{}.h"\n'.format(i)
-
+                if layer_list[i-1]['class_name']=='LSTM':
+                    newline += '#include "weights/wr{}.h"\n'.format(i)
+                if layer_list[i-1]['class_name']=='GRU':
+                    newline += '#include "weights/wr0{}.h"\n'.format(i)
+                    newline += '#include "weights/wr1{}.h"\n'.format(i)
         #Add input/output type
         elif '//hls-fpga-machine-learning insert IO' in line:
             newline = line
@@ -53,6 +61,36 @@ def hls_writer(layer_list, yamlConfig):
         #Add layers
         elif '//hls-fpga-machine-learning insert layers' in line:
             newline = line + '\n'
+            #LSTM setup to deal with for loop buisness....this will not work with dense layers inbetween RNN/LSTMS, but thats impossible
+            for i in range(1,len(layer_list)+1):
+                if layer_list[i-1]['class_name']!='LSTM' and layer_list[i-1]['class_name']!='GRU':
+                    continue
+                n_state = 'N_STATE_{}'.format(i)
+                output_type = 'layer{}_t'.format(i)
+                if yamlConfig["LSTMStatic"]:
+                    newline += "    static"
+                if yamlConfig["LSTMSaveSequences"]:
+                    newline += '    {} layer{}_out[{}*N_LOOP];\n'.format(output_type,i,n_state)
+                else:
+                    newline += '    {} layer{}_out[{}];\n'.format(output_type,i,n_state)
+                if yamlConfig["IOType"] == "io_parallel": newline += '    #pragma HLS ARRAY_PARTITION variable=layer{}_out complete dim=0\n'.format(i)
+                if yamlConfig["IOType"] == "io_serial":   newline += '    #pragma HLS STREAM variable=layer{}_out depth=1\n'.format(i)
+                if not yamlConfig["LSTMStatic"] and layer_list[i-1]['class_name']!='GRU':
+                    newline += '    {} s_state{}_out[{}];\n'.format(output_type,i,n_state)
+                    if yamlConfig["IOType"] == "io_parallel": newline += '    #pragma HLS ARRAY_PARTITION variable=s_state{}_out complete dim=0\n'.format(i)
+                    if yamlConfig["IOType"] == "io_serial":   newline += '    #pragma HLS STREAM variable=s_state{}_out depth=1\n'.format(i)
+                    newline += '    for(int ii = 0; ii < N_STATE_{}; ii++) s_state{}_out[ii] = 0;\n'.format(i,i)
+                if yamlConfig["LSTMSaveSequences"]:  
+                    newline += '    {} tmp_layer{}_out[{}];\n'.format(output_type,i,n_state)
+                    if yamlConfig["IOType"] == "io_parallel": newline += '    #pragma HLS ARRAY_PARTITION variable=tmp_layer{}_out complete dim=0\n'.format(i)
+                    if yamlConfig["IOType"] == "io_serial":   newline += '    #pragma HLS STREAM variable=tmp_layer{}_out depth=1\n'.format(i)
+                    newline += '    {} lstm_layer{}_out[N_LOOP][{}];\n'.format(output_type,i,n_state)
+                    if yamlConfig["IOType"] == "io_parallel": newline += '    #pragma HLS ARRAY_PARTITION variable=lstm_layer{}_out complete dim=0\n'.format(i)
+                    if yamlConfig["IOType"] == "io_serial":   newline += '    #pragma HLS STREAM variable=lstm_layer{}_out depth=1\n'.format(i)
+                    newline += '    for(int ii = 0; ii < N_STATE_{}; ii++) tmp_layer{}_out[ii] = 0;\n'.format(i,i)
+                else:
+                    newline += '    for(int ii = 0; ii < N_STATE_{}; ii++) layer{}_out[ii] = 0;\n'.format(i,i)
+                
             for i in range(1,len(layer_list)+1):
                 
                 #Input to compute_layer
@@ -77,6 +115,16 @@ def hls_writer(layer_list, yamlConfig):
                     input_type = 'layer{}_t'.format(i-1)
                     input_object = 'layer{}_out'.format(i-1)
                     n_in = 'N_LAYER_{}'.format(i-1)
+                #First layer and LSTM
+                elif (i==1 and (layer_list[i-1]['class_name']=='LSTM' or layer_list[i-1]['class_name']=='GRU')):
+                    input_type = 'input_t'
+                    input_object = 'data'
+                    n_in    = 'N_INPUTS'
+                    n_state = 'N_STATE_{}'.format(i)
+                elif layer_list[i-1]['class_name']=='LSTM' or layer_list[i-1]['class_name']=='GRU':
+                    input_type = 'input_t'
+                    input_object = 'layer{}_out'.format(i-1)
+                    n_state = 'N_STATE_{}'.format(i)
                 #First layer and Conv1D
                 elif (i==1 and layer_list[i-1]['class_name']=='Conv1D'):
                     input_type = 'input_t'
@@ -97,7 +145,7 @@ def hls_writer(layer_list, yamlConfig):
                     in_width = 'IN_WIDTH_{}'.format(i)
                     n_chan = 'N_CHAN_{}'.format(i)
                 #Layer is Conv2D
-                elif layer_list[i-1]['class_name']=='Conv2D':
+                elif layer_list[i-1]['class_name']=='Conv1D':
                     input_type = 'layer{}_t'.format(i-1)
                     input_object = 'layer{}_out'.format(i-1)
                     in_height = 'IN_HEIGHT_{}'.format(i)
@@ -112,6 +160,10 @@ def hls_writer(layer_list, yamlConfig):
                     output_object = 'res'
                     n_out = 'N_OUTPUTS'
                 elif layer_list[i-1]['class_name']=='Dense':
+                    output_type = 'layer{}_t'.format(i)
+                    output_object = 'layer{}_out'.format(i)
+                    n_out = 'N_LAYER_{}'.format(i)
+                elif layer_list[i-1]['class_name']=='LSTM' or layer_list[i-1]['class_name']=='GRU':
                     output_type = 'layer{}_t'.format(i)
                     output_object = 'layer{}_out'.format(i)
                     n_out = 'N_LAYER_{}'.format(i)
@@ -135,8 +187,9 @@ def hls_writer(layer_list, yamlConfig):
                         newline += '    {} layer{}_out[{}*{}];\n'.format(output_type,i,y_out,n_filt)
                     elif layer_list[i-1]['class_name']=='Conv2D':
                         newline += '    {} layer{}_out[{}*{}*{}];\n'.format(output_type,i,out_height,out_width,n_filt)
-                    if yamlConfig["IOType"] == "io_parallel": newline += '    #pragma HLS ARRAY_PARTITION variable=layer{}_out complete dim=0\n'.format(i)
-                    if yamlConfig["IOType"] == "io_serial":   newline += '    #pragma HLS STREAM variable=layer{}_out depth=1\n'.format(i)
+                    if layer_list[i-1]['class_name']!='LSTM' and layer_list[i-1]['class_name']!='GRU' :
+                        if yamlConfig["IOType"] == "io_parallel": newline += '    #pragma HLS ARRAY_PARTITION variable=layer{}_out complete dim=0\n'.format(i)
+                        if yamlConfig["IOType"] == "io_serial":   newline += '    #pragma HLS STREAM variable=layer{}_out depth=1\n'.format(i)
 
                 #github Issue 53
                 #Compute Dense layer
@@ -187,6 +240,71 @@ def hls_writer(layer_list, yamlConfig):
                         sublayerline += '}\n'
                         sublayerlines.append(sublayerline)
                     
+                elif layer_list[i-1]['class_name']=='LSTM':
+                    act='{}_config{}'.format(layer_list[i-1]['activation'],i)
+                    recurr_act='{}_config{}'.format(layer_list[i-1]['recurrent_activation'],i)
+                    if i == 1 :
+                        newline += '    for(int iloop = 0; iloop < N_LOOP; iloop++) { \n'
+                    if yamlConfig["LSTMStatic"]:
+                        newline += '       nnet::lstm_static<{}, {}, config{},{},{}_lstm>({},{}'.format(input_type,input_type,i,act,recurr_act,i,input_object)
+                    else:
+                        newline += '       nnet::lstm<{}, {}, config{},{},{}_lstm>({},{}'.format(input_type,input_type,i,act,recurr_act,i,input_object)
+                    if i == 1:
+                        newline += '[iloop]'
+                    if yamlConfig["LSTMSaveSequences"]:  
+                        if yamlConfig["LSTMStatic"]:
+                            newline += ',tmp_layer{}_out,w{},wr{},b{});\n'.format(i,i,i,i,i,i) 
+                        else:
+                            newline += ',tmp_layer{}_out, s_state{}_out,w{},wr{},b{});\n'.format(i,i,i,i,i,i) 
+                        newline += '       for(int istate = 0; istate < N_STATE_{}; istate++) lstm_layer{}_out[iloop][istate] = tmp_layer{}_out[istate];\n'.format(i,i,i)
+                    else:
+                        if yamlConfig["LSTMStatic"]:
+                            newline += ',layer{}_out,w{},wr{},b{});\n'.format(i,i,i,i,i,i) 
+                        else:
+                            newline += ',layer{}_out, s_state{}_out,w{},wr{},b{});'.format(i,i,i,i,i,i) 
+                    if layer_list[i]['class_name']!='LSTM' and layer_list[i]['class_name']!='GRU': #end the loop
+                        newline += '\n    }\n'
+                    if yamlConfig["LSTMSaveSequences"]:  
+                        newline += '    nnet::flatten<{}, {}, {}>(lstm_layer{}_out, layer{}_out);\n'.format(input_type,'N_LOOP', n_state, i, i)
+                    #Deal with matrix multiplication unrolling
+                    sublayerline,sublayerline_h=print_lstm_header(i,n_in,n_state,input_type,output_type)
+                    sublayerlines_h.append(sublayerline_h)
+                    sublayerline += lstmmatrix(''   ,i,    layer_list[i-1]['n_in']              ,layer_list[i-1]['recurr_n_out'],input_type,output_type,layer_list[i-1]['n_part']       ,layer_list[i-1]['n_subout'],yamlConfig["IOType"])
+                    sublayerline += lstmmatrix('nob',i,int(layer_list[i-1]['recurr_n_out']*0.25),layer_list[i-1]['recurr_n_out'],input_type,output_type,layer_list[i-1]['recurr_n_part'],layer_list[i-1]['recurr_n_subout'],yamlConfig["IOType"])
+                    sublayerline += '}\n'
+                    sublayerlines.append(sublayerline)
+                elif layer_list[i-1]['class_name']=='GRU':
+                    act='{}_config{}'.format(layer_list[i-1]['activation'],i)
+                    recurr_act='{}_config{}'.format(layer_list[i-1]['recurrent_activation'],i)
+                    if i == 1 :
+                        newline += '    for(int iloop = 0; iloop < N_LOOP; iloop++) { \n'
+                    if yamlConfig["LSTMStatic"]:
+                        newline += '       nnet::gru_static<{}, {}, config{},{},{}_lstm>({},{}'.format(input_type,input_type,i,act,recurr_act,i,input_object)
+                    else:
+                        newline += '       nnet::gru<{}, {}, config{},{},{}_lstm>({},{}'.format(input_type,input_type,i,act,recurr_act,i,input_object)
+                    if i == 1:
+                        newline += '[iloop]'
+                    if yamlConfig["LSTMSaveSequences"]:  
+                        newline += ',tmp_layer{}_out,w{},wr0{},wr1{},b{});\n'.format(i,i,i,i,i,i,i) 
+                        newline += '       for(int istate = 0; istate < N_STATE_{}; istate++) lstm_layer{}_out[iloop][istate] = tmp_layer{}_out[istate];\n'.format(i,i,i)
+                    else:
+                        newline += ',layer{}_out,w{},wr0{},wr1{},b{});\n'.format(i,i,i,i,i,i,i) 
+                    if layer_list[i]['class_name']!='LSTM' and layer_list[i]['class_name']!='GRU': #end the loop
+                        newline += '\n    }\n'
+                    if yamlConfig["LSTMSaveSequences"]:  
+                        newline += '    nnet::flatten<{}, {}, {}>(lstm_layer{}_out, layer{}_out);\n'.format(input_type,'N_LOOP', n_state, i, i)
+                    #Deal with matrix multiplication unrolling
+                    sublayerline,sublayerline_h=print_gru_header(i,n_in,n_state,input_type,output_type,True)
+                    sublayerline += lstmmatrix(''   ,i,    layer_list[i-1]['n_in']                 ,layer_list[i-1]['recurr_n_out'],input_type,output_type,layer_list[i-1]['n_part']       ,layer_list[i-1]['n_subout'],yamlConfig["IOType"])
+                    sublayerline += lstmmatrix('nob',i,int(layer_list[i-1]['recurr_n_out']*0.334),int(layer_list[i-1]['recurr_n_out']*0.667),input_type,output_type,layer_list[i-1]['recurr1_n_part'],layer_list[i-1]['recurr1_n_subout'],yamlConfig["IOType"])
+                    sublayerline += '}\n'
+                    tmpsublayerline,tmpsublayerline_h=print_gru_header(i,n_in,n_state,input_type,output_type,False)
+                    sublayerline_h+=tmpsublayerline_h
+                    sublayerline +=tmpsublayerline
+                    sublayerline += lstmmatrix('nob',i,int(layer_list[i-1]['recurr_n_out']*0.334),int(layer_list[i-1]['recurr_n_out']*0.334),input_type,output_type,layer_list[i-1]['recurr2_n_part'],layer_list[i-1]['recurr2_n_subout'],yamlConfig["IOType"])
+                    sublayerline += '}\n'
+                    sublayerlines.append(sublayerline)
+                    sublayerlines_h.append(sublayerline_h)
                 elif layer_list[i-1]['class_name']=='Conv1D':
                     if i>1 and layer_list[i-2]['class_name']=='Conv1D':
                         newline += '    {} conv_layer{}_in[{}][{}];\n'.format(input_type,i,y_in,n_chan)
@@ -196,16 +314,17 @@ def hls_writer(layer_list, yamlConfig):
                         newline += '    {} conv_layer{}_out[{}][{}];\n'.format(output_type,i,y_out,n_filt)
                         if yamlConfig["IOType"] == "io_parallel": newline += '    #pragma HLS ARRAY_PARTITION variable=conv_layer{}_out complete dim=0\n'.format(i)
                         if yamlConfig["IOType"] == "io_serial":   newline += '    #pragma HLS STREAM variable=conv_layer{}_out depth=1\n'.format(i)
-                        newline += '    nnet::conv_1d<{}, {}, config{}>(conv_layer{}_in, conv_layer{}_out, w{}, b{});\n'.format(input_type, output_type, i, i, i, i, i, i)  
+                        newline += '    nnet::conv_1d<{}, {}, config{}>(conv_layer{}_in, conv_layer{}_out, w{}, b{});\n'.format(input_type, input_type, i, i, i, i, i, i)  
                     else:                        
                         newline += '    {} conv_layer{}_out[{}][{}];\n'.format(output_type,i,y_out,n_filt)
                         if yamlConfig["IOType"] == "io_parallel": newline += '    #pragma HLS ARRAY_PARTITION variable=conv_layer{}_out complete dim=0\n'.format(i)
                         if yamlConfig["IOType"] == "io_serial":   newline += '    #pragma HLS STREAM variable=conv_layer{}_out depth=1\n'.format(i)
-                        newline += '    nnet::conv_1d<{}, {}, config{}>({}, conv_layer{}_out, w{}, b{});\n'.format(input_type, output_type, i, input_object, i, i, i, i)
+                        newline += '    nnet::conv_1d<{}, {}, config{}>({}, conv_layer{}_out, w{}, b{});\n'.format(input_type, input_type, i, input_object, i, i, i, i)
                     newline += '    {} logits{}[{}*{}];\n'.format(output_type,i,y_out,n_filt)
                     if yamlConfig["IOType"] == "io_parallel": newline += '    #pragma HLS ARRAY_PARTITION variable=logits{} complete dim=0\n'.format(i)
                     if yamlConfig["IOType"] == "io_serial":   newline += '    #pragma HLS STREAM variable=logits{} complete depth=1\n'.format(i)
                     newline += '    nnet::flatten<{}, {}, {}>(conv_layer{}_out, logits{});\n'.format(input_type, y_out, n_filt, i, i)
+
                 elif layer_list[i-1]['class_name']=='Conv2D':
                     if i>1 and layer_list[i-2]['class_name']=='Conv2D':
                         newline += '    {} conv2d_layer{}_in[{}][{}][{}];\n'.format(input_type,i,in_height,in_width,n_chan)
@@ -215,33 +334,35 @@ def hls_writer(layer_list, yamlConfig):
                         newline += '    {} conv2d_layer{}_out[{}][{}][{}];\n'.format(output_type,i,out_height,out_width,n_filt)
                         if yamlConfig["IOType"] == "io_parallel": newline += '    #pragma HLS ARRAY_PARTITION variable=conv2d_layer{}_out complete dim=0\n'.format(i)
                         if yamlConfig["IOType"] == "io_serial":   newline += '    #pragma HLS STREAM variable=conv2d_layer{}_out depth=1\n'.format(i)
-                        newline += '    nnet::conv_2d<{}, {}, config{}>(conv2d_layer{}_in, conv2d_layer{}_out, w{}, b{});\n'.format(input_type, output_type, i, i, i, i, i, i)  
+                        newline += '    nnet::conv_2d<{}, {}, config{}>(conv2d_layer{}_in, conv2d_layer{}_out, w{}, b{});\n'.format(input_type, input_type, i, i, i, i, i, i)  
                     else:                        
                         newline += '    {} conv2d_layer{}_out[{}][{}][{}];\n'.format(output_type,i,out_height,out_width,n_filt)
                         if yamlConfig["IOType"] == "io_parallel": newline += '    #pragma HLS ARRAY_PARTITION variable=conv2d_layer{}_out complete dim=0\n'.format(i)
                         if yamlConfig["IOType"] == "io_serial":   newline += '    #pragma HLS STREAM variable=conv2d_layer{}_out depth=1\n'.format(i)
-                        newline += '    nnet::conv_2d<{}, {}, config{}>({}, conv2d_layer{}_out, w{}, b{});\n'.format(input_type, output_type, i, input_object, i, i, i, i)
+                        newline += '    nnet::conv_2d<{}, {}, config{}>({}, conv2d_layer{}_out, w{}, b{});\n'.format(input_type, input_type, i, input_object, i, i, i, i)
                     newline += '    {} logits{}[{}*{}*{}];\n'.format(output_type,i,out_height,out_width,n_filt)
                     if yamlConfig["IOType"] == "io_parallel": newline += '    #pragma HLS ARRAY_PARTITION variable=logits{} complete dim=0\n'.format(i)
                     if yamlConfig["IOType"] == "io_serial":   newline += '    #pragma HLS STREAM variable=logits{} complete depth=1\n'.format(i)
-                    newline += '    nnet::flatten<{}, {}, {}, {}>(conv2d_layer{}_out, logits{});\n'.format(output_type, out_height, out_width, n_filt, i, i)
+                    newline += '    nnet::flatten<{}, {}, {}, {}>(conv2d_layer{}_out, logits{});\n'.format(input_type, out_height, out_width, n_filt, i, i)
 
                 
                 #Activations
-                activation_name = layer_list[i-1]['activation']+'_config'+str(i)
-                if layer_list[i-1]['activation'] == "relu":
-                    newline += '    nnet::relu<{}, {}, {}>(logits{}, {});\n'.format(output_type, output_type, activation_name, i, output_object)
-                elif layer_list[i-1]['activation'] =="softmax":
-                    newline += '    nnet::softmax<{}, {}, {}>(logits{}, {});\n'.format(output_type, output_type, activation_name, i, output_object)
-                elif layer_list[i-1]['activation'] =="sigmoid":
-                    newline += '    nnet::sigmoid<{}, {}, {}>(logits{}, {});\n'.format(output_type, output_type, activation_name, i, output_object)
-                elif layer_list[i-1]['activation'] =="tanh":
-                    newline += '    nnet::tanh<{}, {}, {}>(logits{}, {});\n'.format(output_type, output_type, activation_name, i, output_object)
-                elif layer_list[i-1]['activation'] =="linear": 
+                if layer_list[i-1]['class_name']!='LSTM' and layer_list[i-1]['class_name']!='GRU':
+                    activation_name = layer_list[i-1]['activation']+'_config'+str(i)
+                    if layer_list[i-1]['activation'] == "relu":
+                        newline += '    nnet::relu<{}, {}, {}>(logits{}, {});\n'.format(output_type, output_type, activation_name, i, output_object)
+                    elif layer_list[i-1]['activation'] =="softmax":
+                        newline += '    nnet::softmax<{}, {}, {}>(logits{}, {});\n'.format(output_type, output_type, activation_name, i, output_object)
+                    elif layer_list[i-1]['activation'] =="sigmoid":
+                        newline += '    nnet::sigmoid<{}, {}, {}>(logits{}, {});\n'.format(output_type, output_type, activation_name, i, output_object)
+                    elif layer_list[i-1]['activation'] =="tanh":
+                        newline += '    nnet::tanh<{}, {}, {}>(logits{}, {});\n'.format(output_type, output_type, activation_name, i, output_object)
+                    elif layer_list[i-1]['activation'] =="linear": 
                     #github Issue 53
-                    newline += '    nnet::linear<{}, {}, {}>(logits{}, {});\n'.format(output_type, output_type, activation_name, i, output_object)
-                else:
-                    raise Exception('ERROR: MISSING ACTIVATION')
+                        newline += '    nnet::linear<{}, {}, {}>(logits{}, {});\n'.format(output_type, output_type, activation_name, i, output_object)
+                    else:
+                        newline += '    nnet::relu<{}, {}, {}>(logits{}, {});\n'.format(output_type, output_type, activation_name, i, output_object)
+                        #raise Exception('ERROR: MISSING ACTIVATION')
 
                 newline += '\n'
 
@@ -291,6 +412,30 @@ def hls_writer(layer_list, yamlConfig):
         typedef weight_default_t weight_t;
         }};\n"""
 
+    lstm_config_template = """struct config{index} : nnet::lstm_config {{
+        typedef accum_default_t accum_t;
+        typedef weight_default_t weight_t;  // Matrix
+        typedef bias_default_t   bias_t;  // Vector
+        static const unsigned n_in  = {n_in};
+        static const unsigned n_out = {n_out};
+        static const unsigned n_state = {n_state};
+        static const unsigned io_type = nnet::io_parallel;
+        static const unsigned reuse_factor = 1;
+        static const bool     store_weights_in_bram = false;        
+        }};\n"""
+
+    gru_config_template = """struct config{index} : nnet::gru_config {{
+        typedef accum_default_t accum_t;
+        typedef weight_default_t weight_t;  // Matrix
+        typedef bias_default_t   bias_t;  // Vector
+        static const unsigned n_in  = {n_in};
+        static const unsigned n_out = {n_out};
+        static const unsigned n_state = {n_state};
+        static const unsigned io_type = nnet::io_parallel;
+        static const unsigned reuse_factor = 1;
+        static const bool     store_weights_in_bram = false;        
+        }};\n"""
+
     conv_config_template = """struct config{index} : nnet::conv_config {{
         static const unsigned pad_left = {pad_left};
         static const unsigned pad_right = {pad_right};
@@ -331,12 +476,26 @@ def hls_writer(layer_list, yamlConfig):
         typedef weight_default_t weight_t;
         }};\n"""
     
-    
 
     activ_config_template = """struct {type}_config{index} : nnet::activ_config {{
         static const unsigned n_in = {n_in};
         static const unsigned table_size = 1024;
         static const unsigned io_type = nnet::{iotype};
+        static const unsigned activation_type = nnet::activ_{type};
+        }};\n"""
+
+    activ_config_lstm_template = """struct {type}_config{index}_lstm : nnet::activ_config {{
+        static const unsigned n_in = {n_in};
+        static const unsigned table_size = 1024;
+        static const unsigned io_type = nnet::{iotype};
+        static const unsigned activation_type = nnet::activ_{type};
+        }};\n"""
+
+    activ_config_gru_template = """struct {type}_config{index}_gru : nnet::activ_config {{
+        static const unsigned n_in = {n_in};
+        static const unsigned table_size = 1024;
+        static const unsigned io_type = nnet::{iotype};
+        static const unsigned activation_type = nnet::activ_{type};
         }};\n"""
 
 
@@ -357,8 +516,25 @@ def hls_writer(layer_list, yamlConfig):
                     newline += '#define N_LAYER_1 {}\n'.format(layer_list[i-1]['n_out'])
                 elif i==len(layer_list) and layer_list[i-1]['class_name']=='Dense':
                     newline += '#define N_OUTPUTS {}\n'.format(layer_list[i-1]['n_out'])
-                elif layer_list[i-1]['class_name']=='Dense':
+                elif layer_list[i-1]['class_name']=='Dense':# and  layer_list[i-2]['class_name']!='LSTM':
                     newline += '#define N_LAYER_{} {}\n'.format(i, layer_list[i-1]['n_out'])    
+                #elif layer_list[i-1]['class_name']=='Dense' and  layer_list[i-2]['class_name']=='LSTM':
+                #    newline += '#define N_LAYER_{} {}\n'.format(i, layer_list[i-1]['n_in'])    
+                elif layer_list[i-1]['class_name']=='LSTM':
+                    #nloop = layer_list[i]['n_in']/int(layer_list[i-1]['recurr_n_out']*0.25)
+                    nloop = yamlConfig["MaxLoop"]
+                    if i == 1:
+                        newline += '#define N_LOOP    {}\n'.format(nloop)
+                        newline += '#define N_INPUTS  {}\n'.format(layer_list[i-1]['n_in'])
+                    newline += '#define N_LAYER_{} {}\n'.format(i,int(layer_list[i-1]['recurr_n_out']*0.25))
+                    newline += '#define N_STATE_{} {}\n'.format(i,int(layer_list[i-1]['recurr_n_out']*0.25))
+                elif layer_list[i-1]['class_name']=='GRU':
+                    nloop = yamlConfig["MaxLoop"]
+                    if i == 1:
+                        newline += '#define N_LOOP    {}\n'.format(nloop)
+                        newline += '#define N_INPUTS  {}\n'.format(layer_list[i-1]['n_in'])
+                    newline += '#define N_LAYER_{} {}\n'.format(i,int(layer_list[i-1]['recurr_n_out']*0.334))
+                    newline += '#define N_STATE_{} {}\n'.format(i,int(layer_list[i-1]['recurr_n_out']*0.334))
                 elif layer_list[i-1]['class_name']=='Conv1D':
                     newline += '#define Y_INPUTS_{} {}\n'.format(i, layer_list[i-1]['y_in'])
                     newline += '#define N_CHAN_{} {}\n'.format(i, layer_list[i-1]['n_chan'])
@@ -385,13 +561,26 @@ def hls_writer(layer_list, yamlConfig):
             for i in range(1,len(layer_list)+1):
                 if i==1 and layer_list[i-1]['class_name']=='Dense':
                     layer_in_name = "N_INPUTS"
+                    n_state_name   = "N_STATE_1"
                     layer_out_name = "N_LAYER_1"                        
+                elif i==1 and (layer_list[i-1]['class_name']=='LSTM' or layer_list[i-1]['class_name']=='GRU'):
+                    layer_in_name  = "N_INPUTS"
+                    layer_out_name = "N_LAYER_1"
+                    n_state_name   = "N_STATE_1"
                 elif i==len(layer_list) and layer_list[i-1]['class_name']=='Dense' and layer_list[i-2]['class_name']=='Conv1D':
                     layer_in_name = "Y_OUTPUTS_{}*N_FILT_{}".format(i-1, i-1)
                     layer_out_name = "N_OUTPUTS"
                 elif i==len(layer_list) and layer_list[i-1]['class_name']=='Dense' and layer_list[i-2]['class_name']=='Conv2D':
                     layer_in_name = "OUT_HEIGHT_{}*OUT_WIDTH_{}*N_FILT_{}".format(i-1, i-1, i-1)
                     layer_out_name = "N_OUTPUTS"
+                elif layer_list[i-1]['class_name']=='Dense' and (layer_list[i-2]['class_name']=='LSTM' or layer_list[i-2]['class_name']=='GRU') and  i==len(layer_list):
+                    if yamlConfig["LSTMSaveSequences"]:
+                        layer_in_name  = "N_LAYER_{}*N_LOOP".format(i-1)
+                    else:
+                        layer_in_name  = "N_LAYER_{}".format(i-1)
+                    n_state_name   = "N_STATE_{}".format(i)   
+                    #layer_out_name = "N_LAYER_{}".format(i)   
+                    layer_out_name = "N_OUTPUTS".format(i)   
                 elif layer_list[i-1]['class_name']=='Dense' and layer_list[i-2]['class_name']=='Conv1D':
                     layer_in_name = "Y_OUTPUTS_{}*N_FILT_{}".format(i-1, i-1)
                     layer_out_name = "N_LAYER_{}".format(i)   
@@ -403,7 +592,11 @@ def hls_writer(layer_list, yamlConfig):
                     layer_out_name = "N_OUTPUTS"               
                 elif layer_list[i-1]['class_name']=='Dense':
                     layer_in_name = "N_LAYER_{}".format(i-1)
-                    layer_out_name = "N_LAYER_{}".format(i)    
+                    layer_out_name = "N_LAYER_{}".format(i)  
+                elif (layer_list[i-1]['class_name']=='LSTM' or layer_list[i-1]['class_name']=='GRU'):
+                    layer_in_name = "N_LAYER_{}".format(i-1)
+                    n_state_name   = "N_STATE_{}".format(i)
+                    layer_out_name = "N_LAYER_{}".format(i)  
                 elif layer_list[i-1]['class_name']=='Conv1D':
                     layer_y_in_name = "Y_INPUTS_{}".format(i)
                     layer_n_chan_name = "N_CHAN_{}".format(i)
@@ -436,6 +629,42 @@ def hls_writer(layer_list, yamlConfig):
                                                                         iotype=yamlConfig["IOType"],
                                                                         reuse=yamlConfig["ReuseFactor"],
                                                                         nzeros=0) # must recalculate nzeros within sublayer function!
+
+                    newline += activ_config_template.format(type=layer_list[i-1]['activation'],
+                                                                    index=str(i), 
+                                                                    n_in=layer_out_name,
+                                                                    iotype=yamlConfig["IOType"]) 
+                elif layer_list[i-1]['class_name']=='LSTM':
+                    newline += lstm_config_template.format(index=str(i), 
+                                                           n_in=layer_in_name,
+                                                           n_out=layer_out_name,
+                                                           n_state=n_state_name,
+                                                           iotype=yamlConfig["IOType"],
+                                                           reuse=yamlConfig["ReuseFactor"],
+                                                           nzeros=layer_list[i-1]['weights_n_zeros'])
+
+                    newline += activ_config_lstm_template.format(type=layer_list[i-1]['recurrent_activation'],
+                                                                    index=str(i), 
+                                                                    n_in=layer_out_name+'*3', 
+                                                                    iotype=yamlConfig["IOType"]) 
+
+                    newline += activ_config_template.format(type=layer_list[i-1]['activation'],
+                                                                    index=str(i), 
+                                                                    n_in=layer_out_name,
+                                                                    iotype=yamlConfig["IOType"]) 
+                elif layer_list[i-1]['class_name']=='GRU':
+                    newline += lstm_config_template.format(index=str(i), 
+                                                           n_in=layer_in_name,
+                                                           n_out=layer_out_name,
+                                                           n_state=n_state_name,
+                                                           iotype=yamlConfig["IOType"],
+                                                           reuse=yamlConfig["ReuseFactor"],
+                                                           nzeros=layer_list[i-1]['weights_n_zeros'])
+
+                    newline += activ_config_lstm_template.format(type=layer_list[i-1]['recurrent_activation'],
+                                                                    index=str(i), 
+                                                                    n_in=layer_out_name+'*2', 
+                                                                    iotype=yamlConfig["IOType"]) 
 
                     newline += activ_config_template.format(type=layer_list[i-1]['activation'],
                                                                     index=str(i), 
@@ -510,6 +739,16 @@ def hls_writer(layer_list, yamlConfig):
             for i in range(0,layer_list[0]['n_in']-1):
                 newline += '0,'
             newline += '0};\n'
+        elif '//hls-fpga-machine-learning insert data' in line and (layer_list[0]['class_name']=='LSTM' or layer_list[0]['class_name']=='GRU'):
+            newline = line
+            newline += '  input_t  data_str[N_LOOP][N_INPUTS] = {'
+            #nloop = layer_list[1]['n_in']/int(layer_list[0]['recurr_n_out']*0.25)
+            nloop = yamlConfig['MaxLoop']
+            for i in range(0,nloop*layer_list[0]['n_in']-1):
+                newline += '0,'
+            newline += '0};\n'
+        #elif 'result_t res_str[N_OUTPUTS]' in line and layer_list[0]['class_name']=='LSTM':
+        #    newline = line.replace('result_t res_str[N_OUTPUTS]','result_t res_str[N_LOOP][N_INPUTS]')
         elif '//hls-fpga-machine-learning insert data' in line and layer_list[0]['class_name']=='Conv1D':
             newline = line
             newline += '  input_t  data_str[Y_INPUTS_1][N_CHAN_1] = {'
@@ -542,6 +781,8 @@ def hls_writer(layer_list, yamlConfig):
             newline = line.replace('MYPROJECT',format(yamlConfig['ProjectName'].upper()))
         elif 'void myproject(' in line:
             newline = 'void {}(\n'.format(yamlConfig['ProjectName'])
+        elif 'input_t data[N_INPUTS]' in line and (layer_list[0]['class_name']=='LSTM' or layer_list[0]['class_name']=='GRU'):
+            newline = line.replace('input_t data[N_INPUTS]','input_t data[N_LOOP][N_INPUTS]')
         elif 'input_t data[N_INPUTS]' in line and layer_list[0]['class_name']=='Conv1D':
             newline = line.replace('input_t data[N_INPUTS]','input_t data[Y_INPUTS_1][N_CHAN_1]')
         elif 'input_t data[N_INPUTS]' in line and layer_list[0]['class_name']=='Conv2D':
@@ -648,3 +889,97 @@ def print_array_to_cpp(name, a, odir ):
 
     return zero_ctr
 
+#######################################
+## write out matrix multiplication function with sublayer style parsing for LSTM
+#######################################
+matrixmult_lstm_config_template = """void lstm_matrixmult_{index} ( 
+          {input_type}  data              [{n_in}],
+          {input_type}  data_recurr       [{n_state}],
+          {output_type} logits{index}     [{n_state}*4],
+          {output_type} logitsnob{index}  [{n_state}*4],
+          {matrix_type} W{index}   [{n_in}*{n_state}*4],
+          {matrix_type} Wr{index}  [{n_state}*{n_state}*4],
+          {matrix_type} b{index}   [{n_state}*4]); \n"""
+
+
+matrixmult_gru_config_template_1 = """void gru_matrixmult_{index}_0 ( 
+          {input_type}  data              [{n_in}],
+          {input_type}  data_recurr       [{n_state}],
+          {output_type} logits{index}     [{n_state}*3],
+          {output_type} logitsnob{index}  [{n_state}*2],
+          {matrix_type} W{index}   [{n_in}*{n_state}*3],
+          {matrix_type} Wr{index}  [{n_state}*{n_state}*2],
+          {matrix_type} b{index}   [{n_state}*3]); \n"""
+
+matrixmult_gru_config_template_2 = """void gru_matrixmult_{index}_1 ( 
+          {input_type}  data_recurr       [{n_state}],
+          {output_type} logitsnob{index}  [{n_state}],
+          {matrix_type} Wr{index}  [{n_state}*{n_state}]); \n"""
+
+
+def print_lstm_header(index,n_in,n_out,input_type,output_type):
+    sublayerline_h = matrixmult_lstm_config_template.format(index=str(index),
+                                                           n_in=str(n_in),
+                                                           n_state=str(n_out),
+                                                           input_type=input_type,
+                                                           output_type=output_type,
+                                                           matrix_type='weight_default_t')
+    sublayerline = sublayerline_h.replace("; \n"," { \n")
+    return sublayerline,sublayerline_h
+
+def print_gru_header(index,n_in,n_out,input_type,output_type,iFirstMult):
+    if iFirstMult:
+        sublayerline_h = matrixmult_gru_config_template_1.format(index=str(index),
+                                                               n_in=str(n_in),
+                                                               n_state=str(n_out),
+                                                               input_type=input_type,
+                                                               output_type=output_type,
+                                                               matrix_type='weight_default_t')
+    else:
+        sublayerline_h = matrixmult_gru_config_template_2.format(index=str(index),
+                                                                 n_state=str(n_out),
+                                                                 input_type=input_type,
+                                                                 output_type=output_type,
+                                                                 matrix_type='weight_default_t')
+    sublayerline = sublayerline_h.replace("; \n"," { \n")
+    return sublayerline,sublayerline_h
+
+
+def lstmmatrix(iLabel,index,n_in,n_out,input_type,output_type,iNPart,iSubOut,iIOType):
+    sublayerline=''
+    if iNPart == 1:
+        if 'nob' in iLabel:
+            sublayerline += '    nnet::matrixmult_W<{}, {}, {},{}, config{}>(data_recurr,logitsnob{}, Wr{});\n'.format(input_type, output_type,n_in,n_out,index, index, index, index)
+        else:
+            sublayerline += '    nnet::matrixmult_Wb<{}, {}, {},{}, config{}>(data      ,logits{}   , W{},b{}); \n'.format(input_type, output_type,n_in,n_out, index, index, index, index)
+    else:
+        for i_part in range(0,iNPart):
+            n_subout = iSubOut[i_part]
+            sublayerline += '    {} logits{}{}_{}[{}];\n'.format(output_type,iLabel,index,i_part,n_subout)                        
+            if iIOType == "io_parallel": sublayerline += '    #pragma HLS ARRAY_PARTITION variable=logits{}{}_{} complete dim=0\n'.format(iLabel,index,i_part)
+            if iIOType == "io_serial":   sublayerline += '    #pragma HLS STREAM variable=logits{}{}_{} depth=1\n'.format(iLabel,index,i_part)
+            # initialize arrays for merged partial outputs 
+        for i_part in range(1, iNPart-1):
+            n_mergeout = sum([iSubOut[kk] for kk in range(0, i_part+1)])
+            sublayerline += '    {} logits{}{}_0to{}[{}];\n'.format(output_type,iLabel,index,i_part,n_mergeout)                        
+            if iIOType == "io_parallel": sublayerline += '    #pragma HLS ARRAY_PARTITION variable=logits{}{}_0to{} complete dim=0\n'.format(iLabel,index,i_part)
+            if iIOType == "io_serial":   sublayerline += '    #pragma HLS STREAM variable=logits{}{}_0to{} depth=1\n'.format(iLabel,index,i_part)
+        # compute sublayer outputs
+        for i_part in range(0, iNPart):
+            n_mergeout = sum([iSubOut[kk] for kk in range(0, i_part)])
+            n_subout = iSubOut[i_part]
+            if 'nob' in iLabel:
+                sublayerline += '    nnet::matrixmultsub_W< {}, {}, {}, {}, {}, {}, config{}>(data_recurr, logits{}{}_{}, Wr{});    \n'.format(input_type, input_type, n_in, n_out, n_subout, n_mergeout, index, iLabel, index, i_part, index)   
+            else:
+                sublayerline += '    nnet::matrixmultsub_Wb<{}, {}, {}, {}, {}, {}, config{}>(data      , logits{}{}_{}, W{}, b{});\n'.format(input_type, input_type, n_in, n_out, n_subout, n_mergeout, index, iLabel, index, i_part, index, index)   
+        for i_part in range(0, iNPart-1):
+            n_mergeout = sum([iSubOut[kk] for kk in range(0, i_part+1)])
+            if iNPart==2:
+                sublayerline += '    nnet::merge<{}, {}, {}>(logits{}{}_{}, logits{}{}_{}, logits{}{});\n'.format(         input_type, n_mergeout, n_subout, iLabel, index, i_part, iLabel, index, i_part+1, iLabel, index)
+            elif i_part==0: 
+                sublayerline += '    nnet::merge<{}, {}, {}>(logits{}{}_{}, logits{}{}_{}, logits{}{}_0to{});\n'.format(   input_type, n_mergeout, n_subout, iLabel, index, i_part, iLabel, index, i_part+1, iLabel, index, i_part+1)
+            elif i_part==iNPart-2:
+                sublayerline += '    nnet::merge<{}, {}, {}>(logits{}{}_0to{}, logits{}{}_{}, logits{}{});\n'.format(      input_type, n_mergeout, n_subout, iLabel, index, i_part, iLabel, index, i_part+1, iLabel, index)
+            else:
+                sublayerline += '    nnet::merge<{}, {}, {}>(logits{}{}_0to{}, logits{}{}_{}, logits{}{}_0to{});\n'.format(input_type, n_mergeout, n_subout, iLabel, index, i_part, iLabel, index, i_part+1, iLabel, index, i_part+1)
+    return sublayerline

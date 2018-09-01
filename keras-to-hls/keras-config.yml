@@ -1,5 +1,5 @@
-KerasJson: example-keras-model-files/KERAS_conv2d_model.json
-KerasH5:   example-keras-model-files/KERAS_conv2d_model_weights.h5
+KerasJson: example-keras-model-files/KERAS_lstm_model.json
+KerasH5:   example-keras-model-files/KERAS_lstm_model_weights.h5
 OutputDir: my-hls-test
 ProjectName: myproject
 XilinxPart: xc7vx690tffg1927-2
@@ -8,3 +8,7 @@ ClockPeriod: 5
 IOType: io_parallel # options: io_serial/io_parallel
 ReuseFactor: 1
 DefaultPrecision: ap_fixed<18,8> 
+
+MaxLoop: 20
+LSTMSaveSequences: False
+LSTMStatic: True

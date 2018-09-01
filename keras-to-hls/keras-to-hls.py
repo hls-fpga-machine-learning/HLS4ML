@@ -10,19 +10,13 @@ import sys
 from shutil import copyfile
 import math
 
-MAXMULT = 4096
+#MAXMULT = 512
+#MAXMULT = 1024
+MAXMULT = 1024
 
 filedir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0,os.path.join(filedir, "..", "hls-writer"))
 from hls_writer import parse_config, print_array_to_cpp, hls_writer
-
-def find_kernel_in_h5(name):
-    if 'kernel' in name:
-        return name
-
-def find_bias_in_h5(name):
-    if 'bias' in name:
-        return name
 
 ############################################################################################
 ## M A I N
@@ -62,10 +56,8 @@ def main():
     #Extract model architecture from json
     with open( yamlConfig['KerasJson'] ) as json_file:
         model_arch = json.load(json_file)
-    #print(model_arch)
-
     #Define supported laers
-    supported_layers = ['InputLayer','Dropout', 'Flatten', 'Dense', 'Conv1D', 'Conv2D']
+    supported_layers = ['InputLayer','Dropout', 'Flatten', 'Dense', 'Conv1D', 'Conv2D','LSTM', 'GRU']
 
     #Define layers to skip for conversion to HLS
     skip_layers = ['InputLayer','Dropout', 'Flatten'] 
@@ -85,14 +77,17 @@ def main():
     # Get input shape and check for unsupported layer type
     current_shape = None
     for keras_layer in layer_config:
+        print(keras_layer["class_name"])
         if keras_layer["class_name"] not in supported_layers:
             raise Exception('ERROR: Unsupported layer type: {}'.format(keras_layer["class_name"]))
         if 'batch_input_shape' in keras_layer['config']:
             current_shape = keras_layer['config']['batch_input_shape'] # [None, 100, 7]    
+
     print('Input shape:', current_shape)
 
     print('Topology:')
     for keras_layer in layer_config:
+        print(keras_layer["class_name"],"Layer")
         if keras_layer["class_name"] is 'Flatten':
             current_shape = [current_shape[0], np.prod(current_shape[1:])]
         if keras_layer["class_name"] in skip_layers:
@@ -107,28 +102,42 @@ def main():
         layer['name']=keras_layer['config']['name']
         layer['class_name']=keras_layer['class_name']
 
+        print("Items",keras_layer["config"].items())
         #Extract type of activation and number of nodes
         for config,config_value in keras_layer["config"].items():
             if(config=="activation"):
                 layer['activation']=config_value
+            if(config=="recurrent_activation"):
+                layer['recurrent_activation']=config_value
             #if(config=="units"):
                 #print("PARSED NUM OF NODES",config_value)
-
+ 
         #Translate weights and biases from h5 file
-        found_weights = h5File[layer['name']].visit(find_kernel_in_h5)
-        weights = h5File['/{}/{}'.format(layer['name'],found_weights)][()]
-        found_bias = h5File[layer['name']].visit(find_bias_in_h5)
-        biases = h5File['/{}/{}'.format(layer['name'],found_bias)][()]
+        if keras_layer["class_name"] == 'LSTM' or keras_layer["class_name"] == 'GRU':
+            recurrent_weights = h5File['/model_weights/{}/{}/recurrent_kernel:0'.format(layer['name'],layer['name'])][()]
+            if keras_layer["class_name"] == 'GRU':
+                recurrent_weights_0 = recurrent_weights[:,0:recurrent_weights.shape[0]*2]
+                recurrent_weights_1 = recurrent_weights[:,recurrent_weights.shape[0]*2:recurrent_weights.shape[0]*3]
+        weights = h5File['/model_weights/{}/{}/kernel:0'.format(layer['name'],layer['name'])][()]
+        biases = h5File['/model_weights/{}/{}/bias:0'.format(layer['name'],layer['name'])][()]
         cur_n_zeros = print_array_to_cpp("w{}".format(layer_counter), weights, yamlConfig['OutputDir'])
         print_array_to_cpp("b{}".format(layer_counter), biases, yamlConfig['OutputDir'])
         layer['weights_n_zeros'] = cur_n_zeros 
+        if keras_layer["class_name"] == 'LSTM' or keras_layer["class_name"] == 'GRU':
+            cur_n_zeros = print_array_to_cpp("wr{}".format(layer_counter), recurrent_weights, yamlConfig['OutputDir'])
+            layer['recurr_weights_n_zeros'] = cur_n_zeros 
+        if keras_layer["class_name"] == 'GRU':
+            cur_n_zeros = print_array_to_cpp("wr0{}".format(layer_counter), recurrent_weights_0, yamlConfig['OutputDir'])
+            layer['recurr1_weights_n_zeros'] = cur_n_zeros 
+            cur_n_zeros = print_array_to_cpp("wr1{}".format(layer_counter), recurrent_weights_1, yamlConfig['OutputDir'])
+            layer['recurr2_weights_n_zeros'] = cur_n_zeros 
         
         # Default one layer call
         layer['n_part'] = 1
         
         #Get number of inputs and outputs
         #(We take it from the weights to avoid dealing with InputLayer and Flatten details)
-        if layer['class_name']=='Dense':
+        if layer['class_name']=='Dense' :
             layer['n_in']=weights.shape[0]
             layer['n_out']=weights.shape[1]
             # if this layer is too big (more than MAXMULT multiplications); 
@@ -150,6 +159,78 @@ def main():
                     layer['n_part'] += 1
                 
             current_shape = [current_shape[0], layer['n_out']]
+        elif (layer['class_name']=='LSTM' or keras_layer["class_name"] == 'GRU'):
+            layer['n_in']=weights.shape[0]
+            layer['n_out']=weights.shape[1]
+            layer['n_subout']=[weights.shape[1]]
+            if layer['n_in']*layer['n_out']>MAXMULT:
+                n_subout = int(MAXMULT/layer['n_in'])
+                n_totout = 0
+                layer['n_subout'] = []
+                layer['n_part'] = 0
+                while n_totout < layer['n_out']:
+                    if n_totout + n_subout <= layer['n_out']:
+                        layer['n_subout'].append(n_subout)
+                        n_totout += n_subout
+                    else:
+                        layer['n_subout'].append(layer['n_out']-n_totout)
+                        n_totout += layer['n_out']-n_totout
+                    layer['n_part'] += 1
+            layer['recurr_n_in']=recurrent_weights.shape[0]
+            layer['recurr_n_out']=recurrent_weights.shape[1]
+            layer['recurr_n_subout']=[recurrent_weights.shape[1]]
+            layer['recurr_n_part'] = 1
+            if layer['recurr_n_in']*layer['recurr_n_out']>MAXMULT:
+                n_subout = int(MAXMULT/layer['recurr_n_in'])
+                n_totout = 0
+                layer['recurr_n_subout'] = []
+                layer['recurr_n_part'] = 0
+                while n_totout < layer['recurr_n_out']:
+                    if n_totout + n_subout <= layer['recurr_n_out']:
+                        layer['recurr_n_subout'].append(n_subout)
+                        n_totout += n_subout
+                    else:
+                        layer['recurr_n_subout'].append(layer['recurr_n_out']-n_totout)
+                        n_totout += layer['recurr_n_out']-n_totout
+                    layer['recurr_n_part'] += 1
+            if keras_layer["class_name"] == 'GRU':
+            #computation for the two GRU matrices
+                layer['recurr1_n_in']=recurrent_weights_0.shape[0]
+                layer['recurr1_n_out']=recurrent_weights_0.shape[1]
+                layer['recurr1_n_subout']=[recurrent_weights_0.shape[1]]
+                layer['recurr1_n_part'] = 1
+                if layer['recurr1_n_in']*layer['recurr1_n_out']>MAXMULT:
+                    n_subout = int(MAXMULT/layer['recurr1_n_in'])
+                    n_totout = 0
+                    layer['recurr1_n_subout'] = []
+                    layer['recurr1_n_part'] = 0
+                    while n_totout < layer['recurr1_n_out']:
+                        if n_totout + n_subout <= layer['recurr1_n_out']:
+                            layer['recurr1_n_subout'].append(n_subout)
+                            n_totout += n_subout
+                        else:
+                            layer['recurr1_n_subout'].append(layer['recurr1_n_out']-n_totout)
+                            n_totout += layer['recurr1_n_out']-n_totout
+                        layer['recurr1_n_part'] += 1
+            #This is pretty messy (2nd GRU matrix)
+                layer['recurr2_n_in']=recurrent_weights_1.shape[0]
+                layer['recurr2_n_out']=recurrent_weights_1.shape[1]
+                layer['recurr2_n_subout']=[recurrent_weights_1.shape[1]]
+                layer['recurr2_n_part'] = 1
+                if layer['recurr2_n_in']*layer['recurr2_n_out']>MAXMULT:
+                    n_subout = int(MAXMULT/layer['recurr2_n_in'])
+                    n_totout = 0
+                    layer['recurr2_n_subout'] = []
+                    layer['recurr2_n_part'] = 0
+                    while n_totout < layer['recurr2_n_out']:
+                        if n_totout + n_subout <= layer['recurr2_n_out']:
+                            layer['recurr2_n_subout'].append(n_subout)
+                            n_totout += n_subout
+                        else:
+                            layer['recurr2_n_subout'].append(layer['recurr2_n_out']-n_totout)
+                            n_totout += layer['recurr2_n_out']-n_totout
+                        layer['recurr2_n_part'] += 1
+
         elif layer['class_name']=='Conv1D':
             # weights.shape = (filter_width, n_channels, n_filters)
             layer['y_in']=current_shape[1]

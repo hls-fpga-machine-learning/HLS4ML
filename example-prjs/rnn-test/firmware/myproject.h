@@ -17,24 +17,21 @@
 //    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
-#ifndef NNET_COMMON_H_
-#define NNET_COMMON_H_
+#ifndef MYPROJECT_H_
+#define MYPROJECT_H_
 
+#include <complex>
+#include "ap_int.h"
 #include "ap_fixed.h"
 
-namespace nnet {
+#include "parameters.h"
 
-// Common type definitions
-enum io_type {io_parallel = 0, io_serial};
 
-// Activation enum
-enum activ_type {activ_relu = 0, activ_sigmoid, activ_tanh, activ_softmax};
-
-// Default data types (??) TODO: Deprecate
-typedef ap_fixed<16,4>  weight_t_def;
-typedef ap_fixed<16,4>  bias_t_def;
-typedef ap_fixed<32,10> accum_t_def;
-
-}
+// Prototype of top level function for C-synthesis
+void myproject(
+      mytype data[N_LOOP][N_INPUTS],
+      mytype res[N_LOOP][N_OUTPUTS],
+      unsigned short &const_size_in,
+      unsigned short &const_size_out);
 
 #endif
