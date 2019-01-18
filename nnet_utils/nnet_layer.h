@@ -42,8 +42,11 @@ struct layer_config
     static const unsigned reuse_factor = 1;
     static const bool store_weights_in_bram = false;
     static const unsigned n_zeros = 0;
+    static const bool use_lowlatency=true;
     // partitioning arrays cyclically to go with roll factors?
 };
+
+#define DIV_ROUNDUP(n,d) ((n + d - 1) / d)
 
  template<class data_T, class res_T, typename CONFIG_T>
 void compute_layer(
@@ -52,27 +55,30 @@ void compute_layer(
     typename CONFIG_T::weight_t  weights[CONFIG_T::n_in*CONFIG_T::n_out],
     typename CONFIG_T::bias_t    biases[CONFIG_T::n_out])
 {
-    data_T cache;
-    typename CONFIG_T::accum_t mult[CONFIG_T::n_in*CONFIG_T::n_out];
+    static const int mult_factor = DIV_ROUNDUP(CONFIG_T::n_in*CONFIG_T::n_out, CONFIG_T::reuse_factor);
+    static const int nmult       = DIV_ROUNDUP(mult_factor, CONFIG_T::n_out);
+    static const int nmults      = DIV_ROUNDUP(mult_factor, CONFIG_T::n_out)*CONFIG_T::n_out;
+    int mult_factor_loop         = mult_factor;
+    typename CONFIG_T::accum_t mult[nmults];
     typename CONFIG_T::accum_t acc[CONFIG_T::n_out];
-
     // Use a function_instantiate in case it helps to explicitly optimize unchanging weights/biases
     #pragma HLS function_instantiate variable=weights,biases
-
     if (CONFIG_T::io_type == io_parallel){
-        // For parallel inputs:
-        //   - completely partition arrays -- target fabric
-        //   - if we have an unroll factor, limit number of multipliers
+      // For parallel inputs:
+      //   - completely partition arrays -- target fabric
+      //   - if we have an unroll factor, limit number of multipliers
+      if(CONFIG_T::store_weights_in_bram) { 
+       #pragma HLS RESOURCE        variable=weights core=ROM_1P_BRAM
+      }
+      #pragma HLS ARRAY_PARTITION variable=biases complete
+      #pragma HLS ARRAY_PARTITION variable=acc    complete
+      #pragma HLS ARRAY_RESHAPE   variable=mult   complete
+      #pragma HLS ARRAY_RESHAPE   variable=weights block factor=mult_factor
+      if(CONFIG_T::use_lowlatency) { 
         #pragma HLS PIPELINE II=CONFIG_T::reuse_factor
-
-        // #pragma HLS ARRAY_PARTITION variable=weights complete // remove this line for now, it breaks compression sometimes
-        #pragma HLS ARRAY_PARTITION variable=biases complete
-        #pragma HLS ARRAY_PARTITION variable=mult complete
-        #pragma HLS ARRAY_PARTITION variable=acc complete
-
-        int multiplier_limit  = ceil(float(CONFIG_T::n_in*CONFIG_T::n_out) / float(CONFIG_T::reuse_factor)) - floor(float(CONFIG_T::n_zeros) / float(CONFIG_T::reuse_factor));
+	int multiplier_limit  = ceil(float(CONFIG_T::n_in*CONFIG_T::n_out) / float(CONFIG_T::reuse_factor)) - floor(float(CONFIG_T::n_zeros) / float(CONFIG_T::reuse_factor));
         #pragma HLS ALLOCATION instances=mul limit=multiplier_limit operation
-
+       }
     } else if (CONFIG_T::io_type == io_serial){
         // Only reduce cycle_factor if n_out is evenly divisible by reuse_factor
         // Otherwise, HLS wont be happy
@@ -92,45 +98,59 @@ void compute_layer(
             #pragma HLS RESOURCE variable=weights core=ROM_2P_BRAM
         }
     }
-    
-    // Do the matrix-multiply
-    Product1: for(int ii = 0; ii < CONFIG_T::n_in; ii++) {
-        if (CONFIG_T::io_type == io_serial){
-            #pragma HLS PIPELINE
-        }
-        cache = data[ii];
-        Product2: for(int jj = 0; jj < CONFIG_T::n_out; jj++) {
-            if (CONFIG_T::io_type == io_serial) {
-                int multiplier_limit  = ceil(float(CONFIG_T::n_out) / float(CONFIG_T::reuse_factor));
-                #pragma HLS ALLOCATION instances=mul limit=multiplier_limit operation
-            }
-	    int index = ii*CONFIG_T::n_out+jj;
-	    mult[index] = cache * weights[index];
-        }
-    }
-
-    // Initialize accumulator with input biases
     ResetAccum: for(int iacc = 0; iacc < CONFIG_T::n_out; iacc++) {
-        if (CONFIG_T::io_type == io_serial){
-            #pragma HLS UNROLL
-        }
-        acc[iacc] = (typename CONFIG_T::accum_t) biases[iacc];
+        #pragma HLS UNROLL
+      acc[iacc] = (typename CONFIG_T::accum_t) biases[iacc];
     }
-
+    ResetMult: for(int imult = 0; imult < nmults; imult++) {
+        #pragma HLS UNROLL
+      mult[imult] = 0;
+    }
+    int rufactor=CONFIG_T::reuse_factor;
+    if(CONFIG_T::use_lowlatency) { 
+      rufactor          = CONFIG_T::n_in;
+      mult_factor_loop  = CONFIG_T::n_out;
+    }
+    data_T cache;
+    Product1: for(int ii = 0; ii < rufactor; ii++) {
+       #pragma HLS PIPELINE II=1 rewind 
+       if(CONFIG_T::use_lowlatency) { 
+	 cache = data[ii];
+       }
+    Product0: for(int jj = 0; jj < mult_factor_loop; jj++) {
+	 if (CONFIG_T::io_type == io_serial) {
+	   int multiplier_limit  = ceil(float(CONFIG_T::n_out) / float(CONFIG_T::reuse_factor));
+           #pragma HLS ALLOCATION instances=mul limit=multiplier_limit operation
+	 } else { //PH Check Me 
+           #pragma HLS UNROLL 
+	 }
+	 int windex = ii+jj*rufactor;
+	 int index   = windex/CONFIG_T::n_out;
+	 if(CONFIG_T::use_lowlatency) { 
+	   mult[windex] = cache*weights[windex];
+	 } else { 
+           int aindex  = (nmult*windex)/CONFIG_T::n_in;
+	   mult[aindex] += data[index]*weights[windex];
+	 }
+       }
+    }
     // Accumulate multiplication result
-    Accum1: for(int ii = 0; ii < CONFIG_T::n_in; ii++) {
-        if (CONFIG_T::io_type == io_serial){
-            #pragma HLS PIPELINE
-        }
-        Accum2: for(int jj = 0; jj < CONFIG_T::n_out; jj++) {
-	    int index = ii*CONFIG_T::n_out+jj;
-	    acc[jj] += mult[index];
-        }
+    Accum1: for(int ii = 0; ii < CONFIG_T::n_out; ii++) {
+     if (CONFIG_T::io_type == io_serial){
+        #pragma HLS PIPELINE
+      } else { 
+        #pragma HLS UNROLL
+      }
+      Accum2: for(int jj = 0; jj < nmult; jj++) {
+       #pragma HLS UNROLL
+       int index = ii*nmult+jj;
+       acc[ii]  += mult[index];
+      }
     }
-
     // Cast to "res_t" type
     Result: for(int ires = 0; ires < CONFIG_T::n_out; ires++){
-        if (CONFIG_T::io_type == io_serial){
+       #pragma HLS UNROLL 
+       if (CONFIG_T::io_type == io_serial){
             #pragma HLS UNROLL
         }
         res[ires] = (res_T) (acc[ires]);

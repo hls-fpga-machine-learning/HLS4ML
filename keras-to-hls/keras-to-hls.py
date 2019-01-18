@@ -10,7 +10,7 @@ import sys
 from shutil import copyfile
 import math
 
-MAXMULT = 4096
+MAXMULT = 4096000
 
 filedir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0,os.path.join(filedir, "..", "hls-writer"))

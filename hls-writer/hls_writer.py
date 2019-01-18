@@ -84,7 +84,7 @@ def hls_writer(layer_list, yamlConfig):
                 newline += '    #pragma HLS ARRAY_RESHAPE variable=data complete dim=0 \n'
                 newline += '    #pragma HLS ARRAY_RESHAPE variable=res complete dim=0 \n'
                 newline += '    #pragma HLS INTERFACE ap_vld port=data,res \n'
-                newline += '    #pragma HLS PIPELINE \n'
+                newline += '    #pragma HLS DATAFLOW \n'
             if yamlConfig["IOType"] == "io_serial":
                 newline += '    #pragma HLS INTERFACE axis port=data,res \n'
                 newline += '    #pragma HLS DATAFLOW \n'
@@ -423,6 +423,7 @@ def hls_writer(layer_list, yamlConfig):
         static const unsigned reuse_factor = {reuse};
         static const unsigned n_zeros = {nzeros};
         static const bool store_weights_in_bram = false;
+        static const bool use_lowlatency = true;
         typedef accum_default_t accum_t;
         typedef bias_default_t bias_t;
         typedef weight_default_t weight_t;
@@ -435,6 +436,7 @@ def hls_writer(layer_list, yamlConfig):
         static const unsigned reuse_factor = {reuse};
         static const unsigned n_zeros = {nzeros};
         static const bool store_weights_in_bram = false;
+        static const bool use_lowlatency = true;
         typedef accum_default_t accum_t;
         typedef bias_default_t bias_t;
         typedef weight_default_t weight_t;

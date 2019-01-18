@@ -1,0 +1,152 @@
+{
+    "backend": "tensorflow",
+    "class_name": "Model",
+    "config": {
+        "input_layers": [
+            [
+                "input",
+                0,
+                0
+            ]
+        ],
+        "layers": [
+            {
+                "class_name": "InputLayer",
+                "config": {
+                    "batch_input_shape": [
+                        null,
+                        825
+                    ],
+                    "dtype": "float32",
+                    "name": "input",
+                    "sparse": false
+                },
+                "inbound_nodes": [],
+                "name": "input"
+            },
+            {
+                "class_name": "Dense",
+                "config": {
+                    "activation": "linear",
+                    "activity_regularizer": null,
+                    "bias_constraint": null,
+                    "bias_initializer": {
+                        "class_name": "Zeros",
+                        "config": {}
+                    },
+                    "bias_regularizer": null,
+                    "kernel_constraint": null,
+                    "kernel_initializer": {
+                        "class_name": "RandomNormal",
+                        "config": {
+                            "mean": 0.0,
+                            "seed": null,
+                            "stddev": 0.05
+                        }
+                    },
+                    "kernel_regularizer": null,
+                    "name": "dense_1",
+                    "trainable": true,
+                    "units": 1125,
+                    "use_bias": true
+                },
+                "inbound_nodes": [
+                    [
+                        [
+                            "input",
+                            0,
+                            0,
+                            {}
+                        ]
+                    ]
+                ],
+                "name": "dense_1"
+            },
+            {
+                "class_name": "Dense",
+                "config": {
+                    "activation": "linear",
+                    "activity_regularizer": null,
+                    "bias_constraint": null,
+                    "bias_initializer": {
+                        "class_name": "Zeros",
+                        "config": {}
+                    },
+                    "bias_regularizer": null,
+                    "kernel_constraint": null,
+                    "kernel_initializer": {
+                        "class_name": "RandomNormal",
+                        "config": {
+                            "mean": 0.0,
+                            "seed": null,
+                            "stddev": 0.05
+                        }
+                    },
+                    "kernel_regularizer": null,
+                    "name": "dense_2",
+                    "trainable": true,
+                    "units": 375,
+                    "use_bias": true
+                },
+                "inbound_nodes": [
+                    [
+                        [
+                            "dense_1",
+                            0,
+                            0,
+                            {}
+                        ]
+                    ]
+                ],
+                "name": "dense_2"
+            },
+            {
+                "class_name": "Dense",
+                "config": {
+                    "activation": "linear",
+                    "activity_regularizer": null,
+                    "bias_constraint": null,
+                    "bias_initializer": {
+                        "class_name": "Zeros",
+                        "config": {}
+                    },
+                    "bias_regularizer": null,
+                    "kernel_constraint": null,
+                    "kernel_initializer": {
+                        "class_name": "RandomNormal",
+                        "config": {
+                            "mean": 0.0,
+                            "seed": null,
+                            "stddev": 0.05
+                        }
+                    },
+                    "kernel_regularizer": null,
+                    "name": "output",
+                    "trainable": true,
+                    "units": 75,
+                    "use_bias": true
+                },
+                "inbound_nodes": [
+                    [
+                        [
+                            "dense_2",
+                            0,
+                            0,
+                            {}
+                        ]
+                    ]
+                ],
+                "name": "output"
+            }
+        ],
+        "name": "model_1",
+        "output_layers": [
+            [
+                "output",
+                0,
+                0
+            ]
+        ]
+    },
+    "keras_version": "2.2.2"
+}

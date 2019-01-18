@@ -1,5 +1,5 @@
-KerasJson: example-keras-model-files/KERAS_3layer.json
-KerasH5:   example-keras-model-files/KERAS_3layer_70pruned_retrained_weights.h5
+KerasJson: example-keras-model-files/KERAS_1layer.json
+KerasH5:   example-keras-model-files/KERAS_1layer_weights.h5
 OutputDir: my-hls-test
 ProjectName: myproject
 XilinxPart: xcku115-flvb2104-2-i
