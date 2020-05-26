@@ -57,6 +57,26 @@ conv_mult_config_template = """struct config{index}_mult : nnet::dense_config {{
     typedef {weight_t} weight_t;
 }};\n"""
 
+conv_mult1_config_template = """struct config{index}_mult1 : nnet::dense_config {{
+    static const unsigned n_in = {n_in};
+    static const unsigned n_out = {n_out};
+    static const unsigned reuse_factor = {reuse};
+    typedef {accum_t} accum_t;
+    typedef {bias_t} bias_t;
+    typedef {weight_t} weight_t;
+}};\n"""
+
+
+conv_mult2_config_template = """struct config{index}_mult2 : nnet::dense_config {{
+    static const unsigned n_in = {n_in};
+    static const unsigned n_out = {n_out};
+    static const unsigned reuse_factor = {reuse};
+    typedef {accum_t} accum_t;
+    typedef {bias_t} bias_t;
+    typedef {weight_t} weight_t;
+}};\n"""
+
+
 conv2d_config_template = """struct config{index} : nnet::conv2d_config {{
     static const unsigned pad_top = {pad_top};
     static const unsigned pad_bottom = {pad_bottom};
@@ -81,11 +101,55 @@ conv2d_config_template = """struct config{index} : nnet::conv2d_config {{
     typedef {config_t} mult_config;
 }};\n"""
 
-activ_config_template = """struct {type}_config{index} : nnet::activ_config {{
+lstm_config_template = """struct config{index} : nnet::lstm_config {{
+    typedef {accum_t} accum_t;
+    typedef {weight_t} weight_t;  // Matrix
+    typedef {bias_t} bias_t;  // Vector
+    typedef {config_mult_t1} mult_config1;
+    typedef {config_mult_t2} mult_config2;
+    typedef {lstm_act_t} ACT_CONFIG_LSTM;
+    typedef {act_t} ACT_CONFIG_T;
+    static const unsigned n_in  = {n_in};
+    static const unsigned n_out = {n_out};
+    static const unsigned n_state = {n_state};
+    static const unsigned n_sequence = {n_sequence};
+    static const unsigned n_sequence_out = {n_sequence_out};
+    static const unsigned io_type = nnet::io_parallel;
+    static const unsigned reuse_factor = 1;
+    static const bool store_weights_in_bram = false;        
+}};\n"""
+
+gru_config_template = """struct config{index} : nnet::gru_config {{
+    typedef {accum_t} accum_t;
+    typedef {weight_t} weight_t;  // Matrix
+    typedef {bias_t} bias_t;  // Vector
+    typedef {config_mult_t1} mult_config1;
+    typedef {config_mult_t2} mult_config2;
+    typedef {gru_act_t} ACT_CONFIG_GRU;
+    typedef {act_t} ACT_CONFIG_T;
+    static const unsigned n_in  = {n_in};
+    static const unsigned n_out = {n_out};
+    static const unsigned n_state = {n_state};
+    static const unsigned n_sequence = {n_sequence};
+    static const unsigned n_sequence_out = {n_sequence_out};
+    static const unsigned io_type = nnet::io_parallel;
+    static const unsigned reuse_factor = 1;
+    static const bool store_weights_in_bram = false;        
+}};\n"""
+
+activ_config_recr_template = """struct {recurrent_activation}_config{index}_recr : nnet::activ_config {{
+    static const unsigned n_in = {n_in};
+    static const unsigned table_size = 1024;
+    static const unsigned io_type = nnet::{iotype};
+    static const unsigned activation_type = nnet::activ_{recurrent_activation};
+}};\n"""
+
+activ_config_template = """struct {activation}_config{index} : nnet::activ_config {{
     static const unsigned n_in = {n_in};
     static const unsigned table_size = {table_size};
     static const unsigned io_type = nnet::{iotype};
     static const unsigned reuse_factor = {reuse};
+    static const unsigned activation_type = nnet::activ_{activation};
     typedef {table_t} table_t;
 }};\n"""
 
@@ -151,6 +215,9 @@ dense_function_template = 'nnet::dense_{strategy}<{input_t}, {output_t}, {config
 batchnorm_function_template = 'nnet::normalize<{input_t}, {output_t}, {config}>({input}, {output}, {scale}, {bias});'
 conv1d_function_template = 'nnet::conv_1d_{strategy}_{data_format}<{input_t}, {output_t}, {config}>({input}, {output}, {w}, {b});'
 conv2d_function_template = 'nnet::conv_2d_{strategy}_{data_format}<{input_t}, {output_t}, {config}>({input}, {output}, {w}, {b});'
+lstm_function_template = 'nnet::lstm_loop<{input_t}, {input_t}, {config}>({input}, {output}, {w}, {wr}, {b}, {br});'
+gru_function_template = 'nnet::gru_loop<{input_t}, {output_t}, {config}>({input}, {output}, {w}, {wr}, {b}, {br});'
+activ_recr_function_template = 'nnet::{recurrent_activation}<{input_t}, {output_t}, {config}>({input}, {output});'
 activ_function_template = 'nnet::{activation}<{input_t}, {output_t}, {config}>({input}, {output});'
 param_activ_function_template = 'nnet::{activation}<{input_t}, {output_t}, {config}>({input}, {param}, {output});'
 pooling1d_function_template = 'nnet::pooling1d<{input_t}, {config}>({input}, {output});'
@@ -163,6 +230,7 @@ dense_include_list = ['nnet_utils/nnet_dense.h', 'nnet_utils/nnet_dense_compress
 batchnorm_include_list = ['nnet_utils/nnet_batchnorm.h']
 conv1d_include_list = ['nnet_utils/nnet_conv.h', 'nnet_utils/nnet_conv_large.h']
 conv2d_include_list = ['nnet_utils/nnet_conv2d.h', 'nnet_utils/nnet_conv2d_large.h']
+lstm_include_list = ['nnet_utils/nnet_recurrent.h']
 activ_include_list = ['nnet_utils/nnet_activation.h']
 pooling_include_list = ['nnet_utils/nnet_pooling.h']
 merge_include_list = ['nnet_utils/nnet_merge.h']
@@ -177,6 +245,9 @@ class VivadoBackend(Backend):
         self.register_templates('BatchNormalization'     , batchnorm_function_template,   batchnorm_config_template, batchnorm_include_list)
         self.register_templates('Conv1D'                 , conv1d_function_template,      [conv1d_config_template, conv_mult_config_template], conv1d_include_list)
         self.register_templates('Conv2D'                 , conv2d_function_template,      [conv2d_config_template, conv_mult_config_template], conv2d_include_list)
+        self.register_templates('LSTM'                   , lstm_function_template,        [lstm_config_template, conv_mult1_config_template, activ_config_recr_template, activ_config_template, conv_mult2_config_template], lstm_include_list)
+        self.register_templates('GRU'                    , gru_function_template,         [gru_config_template, conv_mult1_config_template,activ_config_recr_template, activ_config_template, conv_mult2_config_template], lstm_include_list)
+        self.register_templates('Recurrent_Activation'   , activ_recr_function_template,   activ_config_recr_template, activ_include_list)
         self.register_templates('Activation'             , activ_function_template,       activ_config_template, activ_include_list)
         self.register_templates('ParametrizedActivation' , param_activ_function_template, activ_config_template, activ_include_list)
         self.register_templates('PReLU'                  , param_activ_function_template, activ_config_template, activ_include_list)

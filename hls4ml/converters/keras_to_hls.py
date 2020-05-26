@@ -103,6 +103,7 @@ def keras_to_hls(yamlConfig):
     #Define supported laers
     core_layers = ['InputLayer', 'Dropout', 'Flatten', 'Dense', 'BinaryDense', 'TernaryDense', 'Reshape']
     conv_layers = ['Conv1D', 'Conv2D', 'BinaryConv2D']
+    rnn_layers = ['LSTM', 'GRU']
     pooling_layers = ['MaxPooling1D', 'MaxPooling2D', 'AveragePooling1D', 'AveragePooling2D']
     norm_layers = ['BatchNormalization']
     activation_layers = ['Activation', 'LeakyReLU', 'ThresholdedReLU', 'ELU', 'PReLU']
@@ -111,7 +112,7 @@ def keras_to_hls(yamlConfig):
     #Define layers to skip for conversion to HLS
     skip_layers = ['Dropout', 'Flatten']
     #All supported layers
-    supported_layers = core_layers + conv_layers + pooling_layers + norm_layers + activation_layers + merge_layers + qkeras_layers + skip_layers
+    supported_layers = core_layers + conv_layers + rnn_layers + pooling_layers + norm_layers + activation_layers + merge_layers + qkeras_layers + skip_layers
 
     #Map inputs of skipped and split (activation) layers
     inputs_map = {}
@@ -195,6 +196,8 @@ def keras_to_hls(yamlConfig):
                 layer['activation']=config_value
             if(config=="epsilon"):
                 layer['epsilon']=config_value
+            if(config=="recurrent_activation"):
+                layer['recurrent_activation']=config_value
             #if(config=="units"):
                 #print("PARSED NUM OF NODES",config_value)
 
@@ -299,6 +302,87 @@ def keras_to_hls(yamlConfig):
             get_qkeras_quantization(layer, keras_layer)
             if layer['data_format'] == 'channels_first': output_shape=[input_shapes[0][0], layer['n_filt'], layer['out_height'], layer['out_width']]
             else: output_shape=[input_shapes[0][0], layer['out_height'], layer['out_width'], layer['n_filt']]
+
+        elif layer['class_name']=='LSTM':
+            weights_shape = get_weights_shape(yamlConfig['KerasH5'], layer['name'], var_name='kernel')
+            recurrent_weights_shape = get_weights_shape(yamlConfig['KerasH5'], layer['name'], var_name='recurrent_kernel')
+            return_sequences_config = keras_layer['config']['return_sequences']
+            layer['n_sequence']= input_shapes[0][1]
+            layer['n_sequence_out'] = layer['n_sequence'] if return_sequences_config else 1
+            layer['n_in']=weights_shape[0]
+            layer['n_out']=weights_shape[1]
+            layer['n_subout']=[weights_shape[1]]
+            if layer['n_in']*layer['n_out']>MAXMULT:
+                n_subout = int(MAXMULT/layer['n_in'])
+                n_totout = 0
+                layer['n_subout'] = []
+                layer['n_part'] = 0
+                while n_totout < layer['n_out']:
+                    if n_totout + n_subout <= layer['n_out']:
+                        layer['n_subout'].append(n_subout)
+                        n_totout += n_subout
+                    else:
+                        layer['n_subout'].append(layer['n_out']-n_totout)
+                        n_totout += layer['n_out']-n_totout
+                    layer['n_part'] += 1
+            layer['recurr_n_in']=recurrent_weights_shape[0]
+            layer['recurr_n_out']=recurrent_weights_shape[1]
+            layer['recurr_n_subout']=[recurrent_weights_shape[1]]
+            layer['recurr_n_part'] = 1
+            if layer['recurr_n_in']*layer['recurr_n_out']>MAXMULT:
+                n_subout = int(MAXMULT/layer['recurr_n_in'])
+                n_totout = 0
+                layer['recurr_n_subout'] = []
+                layer['recurr_n_part'] = 0
+                while n_totout < layer['recurr_n_out']:
+                    if n_totout + n_subout <= layer['recurr_n_out']:
+                        layer['recurr_n_subout'].append(n_subout)
+                        n_totout += n_subout
+                    else:
+                        layer['recurr_n_subout'].append(layer['recurr_n_out']-n_totout)
+                        n_totout += layer['recurr_n_out']-n_totout
+                    layer['recurr_n_part'] += 1	
+
+        elif layer['class_name']=='GRU':
+            weights_shape = get_weights_shape(yamlConfig['KerasH5'], layer['name'], var_name='kernel')
+            recurrent_weights_shape = get_weights_shape(yamlConfig['KerasH5'], layer['name'], var_name='recurrent_kernel')
+            return_sequences_config = keras_layer['config']['return_sequences']
+            layer['n_sequence'] = input_shapes[0][1]
+            layer['n_sequence_out'] = layer['n_sequence'] if return_sequences_config else 1
+            layer['n_in']=weights_shape[0]
+            layer['n_out']=weights_shape[1]
+            layer['n_subout']=[weights_shape[1]]
+            if layer['n_in']*layer['n_out']>MAXMULT:
+                n_subout = int(MAXMULT/layer['n_in'])
+                n_totout = 0
+                layer['n_subout'] = []
+                layer['n_part'] = 0
+                while n_totout < layer['n_out']:
+                    if n_totout + n_subout <= layer['n_out']:
+                        layer['n_subout'].append(n_subout)
+                        n_totout += n_subout
+                    else:
+                        layer['n_subout'].append(layer['n_out']-n_totout)
+                        n_totout += layer['n_out']-n_totout
+                    layer['n_part'] += 1
+            layer['recurr_n_in']=recurrent_weights_shape[0]
+            layer['recurr_n_out']=recurrent_weights_shape[1]
+            layer['recurr_n_subout']=[recurrent_weights_shape[1]]
+            layer['recurr_n_part'] = 1
+            if layer['recurr_n_in']*layer['recurr_n_out']>MAXMULT:
+                n_subout = int(MAXMULT/layer['recurr_n_in'])
+                n_totout = 0
+                layer['recurr_n_subout'] = []
+                layer['recurr_n_part'] = 0
+                while n_totout < layer['recurr_n_out']:
+                    if n_totout + n_subout <= layer['recurr_n_out']:
+                        layer['recurr_n_subout'].append(n_subout)
+                        n_totout += n_subout
+                    else:
+                        layer['recurr_n_subout'].append(layer['recurr_n_out']-n_totout)
+                        n_totout += layer['recurr_n_out']-n_totout
+                    layer['recurr_n_part'] += 1	
+
         elif layer['class_name']=='BatchNormalization':
             in_size = 1
             for dim in input_shapes[0][1:]:
@@ -417,7 +501,7 @@ def keras_to_hls(yamlConfig):
 
         print('Layer name: {}, layer type: {}, current shape: {}'.format(layer['name'], layer['class_name'], input_shapes))
         layer_list.append( layer )
-        if 'activation' in layer and layer['class_name'] not in activation_layers + qkeras_layers:
+        if 'activation' in layer and layer['class_name'] not in activation_layers + qkeras_layers + rnn_layers:
             act_layer = {}
             act_layer['name'] = layer['name'] + '_' + layer['activation']
             act_layer['activation'] = layer['activation']

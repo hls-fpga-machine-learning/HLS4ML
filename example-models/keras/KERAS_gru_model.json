@@ -1,0 +1,213 @@
+{
+    "backend": "tensorflow",
+    "class_name": "Model",
+    "config": {
+        "input_layers": [
+            [
+                "input_1",
+                0,
+                0
+            ]
+        ],
+        "layers": [
+            {
+                "class_name": "InputLayer",
+                "config": {
+                    "batch_input_shape": [
+                        null,
+                        20,
+                        6
+                    ],
+                    "dtype": "float32",
+                    "name": "input_1",
+                    "sparse": false
+                },
+                "inbound_nodes": [],
+                "name": "input_1"
+            },
+            {
+                "class_name": "GRU",
+                "config": {
+                    "activation": "relu",
+                    "activity_regularizer": null,
+                    "bias_constraint": null,
+                    "bias_initializer": {
+                        "class_name": "Zeros",
+                        "config": {}
+                    },
+                    "bias_regularizer": null,
+                    "dropout": 0.0,
+                    "go_backwards": false,
+                    "implementation": 1,
+                    "kernel_constraint": null,
+                    "kernel_initializer": {
+                        "class_name": "VarianceScaling",
+                        "config": {
+                            "distribution": "uniform",
+                            "mode": "fan_avg",
+                            "scale": 1.0,
+                            "seed": null
+                        }
+                    },
+                    "kernel_regularizer": {
+                        "class_name": "L1L2",
+                        "config": {
+                            "l1": 9.999999747378752e-05,
+                            "l2": 0.0
+                        }
+                    },
+                    "name": "gru_selu",
+                    "recurrent_activation": "sigmoid",
+                    "recurrent_constraint": null,
+                    "recurrent_dropout": 0.0,
+                    "recurrent_initializer": {
+                        "class_name": "Orthogonal",
+                        "config": {
+                            "gain": 1.0,
+                            "seed": null
+                        }
+                    },
+                    "recurrent_regularizer": {
+                        "class_name": "L1L2",
+                        "config": {
+                            "l1": 0.0010000000474974513,
+                            "l2": 0.0
+                        }
+                    },
+                    "return_sequences": false,
+                    "return_state": false,
+                    "stateful": false,
+                    "trainable": true,
+                    "units": 20,
+                    "unroll": false,
+                    "use_bias": true
+                },
+                "inbound_nodes": [
+                    [
+                        [
+                            "input_1",
+                            0,
+                            0,
+                            {}
+                        ]
+                    ]
+                ],
+                "name": "gru_selu"
+            },
+            {
+                "class_name": "Dense",
+                "config": {
+                    "activation": "relu",
+                    "activity_regularizer": null,
+                    "bias_constraint": null,
+                    "bias_initializer": {
+                        "class_name": "Zeros",
+                        "config": {}
+                    },
+                    "bias_regularizer": null,
+                    "kernel_constraint": null,
+                    "kernel_initializer": {
+                        "class_name": "VarianceScaling",
+                        "config": {
+                            "distribution": "uniform",
+                            "mode": "fan_in",
+                            "scale": 1.0,
+                            "seed": null
+                        }
+                    },
+                    "kernel_regularizer": {
+                        "class_name": "L1L2",
+                        "config": {
+                            "l1": 9.999999747378752e-05,
+                            "l2": 0.0
+                        }
+                    },
+                    "name": "dense_relu",
+                    "trainable": true,
+                    "units": 20,
+                    "use_bias": true
+                },
+                "inbound_nodes": [
+                    [
+                        [
+                            "gru_selu",
+                            0,
+                            0,
+                            {}
+                        ]
+                    ]
+                ],
+                "name": "dense_relu"
+            },
+            {
+                "class_name": "Dropout",
+                "config": {
+                    "name": "dropout_1",
+                    "noise_shape": null,
+                    "rate": 0.1,
+                    "seed": null,
+                    "trainable": true
+                },
+                "inbound_nodes": [
+                    [
+                        [
+                            "dense_relu",
+                            0,
+                            0,
+                            {}
+                        ]
+                    ]
+                ],
+                "name": "dropout_1"
+            },
+            {
+                "class_name": "Dense",
+                "config": {
+                    "activation": "softmax",
+                    "activity_regularizer": null,
+                    "bias_constraint": null,
+                    "bias_initializer": {
+                        "class_name": "Zeros",
+                        "config": {}
+                    },
+                    "bias_regularizer": null,
+                    "kernel_constraint": null,
+                    "kernel_initializer": {
+                        "class_name": "VarianceScaling",
+                        "config": {
+                            "distribution": "uniform",
+                            "mode": "fan_in",
+                            "scale": 1.0,
+                            "seed": null
+                        }
+                    },
+                    "kernel_regularizer": null,
+                    "name": "rnn_densef",
+                    "trainable": true,
+                    "units": 5,
+                    "use_bias": true
+                },
+                "inbound_nodes": [
+                    [
+                        [
+                            "dropout_1",
+                            0,
+                            0,
+                            {}
+                        ]
+                    ]
+                ],
+                "name": "rnn_densef"
+            }
+        ],
+        "name": "model_1",
+        "output_layers": [
+            [
+                "rnn_densef",
+                0,
+                0
+            ]
+        ]
+    },
+    "keras_version": "2.1.3"
+}
