@@ -50,6 +50,22 @@ typedef ap_fixed<32,10> accum_t_def;
    }
  }
 
+ template<class data_T, int NSHARED, int NIN1, int NIN2>
+   void merge2d(
+		data_T data1[NSHARED][NIN1], 
+		data_T data2[NSHARED][NIN2],
+		data_T res[NSHARED][NIN1+NIN2])
+ {
+   for(int ii=0; ii<NSHARED; ii++){
+     for(int jj=0; jj<NIN1; jj++){
+       res[ii][jj] = data1[ii][jj];
+     }
+     for(int jj=0; jj<NIN2; jj++){
+       res[ii][NIN1+jj] = data2[ii][jj];
+     }
+   }
+ }
+ 
 }
 
 #endif

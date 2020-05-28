@@ -1,0 +1,38 @@
+# This file may be used to create an environment using:
+# $ conda create --name <env> --file <this file>
+# platform: linux-64
+@EXPLICIT
+https://repo.anaconda.com/pkgs/main/linux-64/ca-certificates-2018.03.07-0.tar.bz2
+https://repo.anaconda.com/pkgs/main/linux-64/conda-env-2.6.0-h36134e3_1.tar.bz2
+https://repo.anaconda.com/pkgs/main/linux-64/libgcc-ng-7.2.0-hdf63c60_3.tar.bz2
+https://repo.anaconda.com/pkgs/main/linux-64/libstdcxx-ng-7.2.0-hdf63c60_3.tar.bz2
+https://repo.anaconda.com/pkgs/main/linux-64/libffi-3.2.1-hd88cf55_4.tar.bz2
+https://repo.anaconda.com/pkgs/main/linux-64/ncurses-6.1-hf484d3e_0.tar.bz2
+https://repo.anaconda.com/pkgs/main/linux-64/openssl-1.0.2p-h14c3975_0.tar.bz2
+https://repo.anaconda.com/pkgs/main/linux-64/tk-8.6.7-hc745277_3.tar.bz2
+https://repo.anaconda.com/pkgs/main/linux-64/xz-5.2.4-h14c3975_4.tar.bz2
+https://repo.anaconda.com/pkgs/main/linux-64/yaml-0.1.7-had09818_2.tar.bz2
+https://repo.anaconda.com/pkgs/main/linux-64/zlib-1.2.11-ha838bed_2.tar.bz2
+https://repo.anaconda.com/pkgs/main/linux-64/libedit-3.1.20170329-h6b74fdf_2.tar.bz2
+https://repo.anaconda.com/pkgs/main/linux-64/readline-7.0-ha6073c6_4.tar.bz2
+https://repo.anaconda.com/pkgs/main/linux-64/sqlite-3.23.1-he433501_0.tar.bz2
+https://repo.anaconda.com/pkgs/main/linux-64/python-3.6.5-hc3d631a_2.tar.bz2
+https://repo.anaconda.com/pkgs/main/linux-64/asn1crypto-0.24.0-py36_0.tar.bz2
+https://repo.anaconda.com/pkgs/main/linux-64/certifi-2018.8.24-py36_1.tar.bz2
+https://repo.anaconda.com/pkgs/main/linux-64/chardet-3.0.4-py36h0f667ec_1.tar.bz2
+https://repo.anaconda.com/pkgs/main/linux-64/idna-2.6-py36h82fb2a8_1.tar.bz2
+https://repo.anaconda.com/pkgs/main/linux-64/pandas-0.23.0-py36h637b7d7_0.tar.bz2
+https://repo.anaconda.com/pkgs/main/linux-64/pycosat-0.6.3-py36h0a5515d_0.tar.bz2
+https://repo.anaconda.com/pkgs/main/linux-64/pycparser-2.18-py36hf9f622e_1.tar.bz2
+https://repo.anaconda.com/pkgs/main/linux-64/pysocks-1.6.8-py36_0.tar.bz2
+https://repo.anaconda.com/pkgs/main/linux-64/ruamel_yaml-0.15.37-py36h14c3975_2.tar.bz2
+https://repo.anaconda.com/pkgs/main/linux-64/six-1.11.0-py36h372c433_1.tar.bz2
+https://repo.anaconda.com/pkgs/main/linux-64/cffi-1.11.5-py36h9745a5d_0.tar.bz2
+https://repo.anaconda.com/pkgs/main/linux-64/setuptools-39.2.0-py36_0.tar.bz2
+https://repo.anaconda.com/pkgs/main/linux-64/cryptography-2.2.2-py36h14c3975_0.tar.bz2
+https://repo.anaconda.com/pkgs/main/linux-64/wheel-0.31.1-py36_0.tar.bz2
+https://repo.anaconda.com/pkgs/main/linux-64/pip-10.0.1-py36_0.tar.bz2
+https://repo.anaconda.com/pkgs/main/linux-64/pyopenssl-18.0.0-py36_0.tar.bz2
+https://repo.anaconda.com/pkgs/main/linux-64/urllib3-1.22-py36hbe7ace6_0.tar.bz2
+https://repo.anaconda.com/pkgs/main/linux-64/requests-2.18.4-py36he2e5f8d_1.tar.bz2
+https://repo.anaconda.com/pkgs/main/linux-64/conda-4.5.11-py36_0.tar.bz2

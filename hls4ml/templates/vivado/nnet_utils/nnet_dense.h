@@ -35,6 +35,7 @@ struct dense_config
     typedef float accum_t;
 
     // Layer Sizes
+    static const unsigned n_batch = 1;
     static const unsigned n_in = 10;
     static const unsigned n_out = 10;
 
@@ -127,9 +128,9 @@ void dense_latency(
         #pragma HLS ARRAY_PARTITION variable=biases complete
         #pragma HLS ARRAY_PARTITION variable=mult complete
         #pragma HLS ARRAY_PARTITION variable=acc complete
-
+  
         int multiplier_limit  = ceil(float(CONFIG_T::n_in*CONFIG_T::n_out) / float(CONFIG_T::reuse_factor)) - floor(float(CONFIG_T::n_zeros) / float(CONFIG_T::reuse_factor));
-        #pragma HLS ALLOCATION instances=product limit=multiplier_limit function
+        #pragma HLS ALLOCATION instances=mul limit=multiplier_limit operation
 
     } else if (CONFIG_T::io_type == io_serial){
         // Only reduce cycle_factor if n_out is evenly divisible by reuse_factor
@@ -201,6 +202,26 @@ void dense_latency(
     }
 }
 
+ template<class data_T, class res_T, typename CONFIG_T>
+void dense_batch(
+    data_T    data[CONFIG_T::n_batch][CONFIG_T::n_in],
+    res_T     res[CONFIG_T::n_batch][CONFIG_T::n_out],
+    typename CONFIG_T::weight_t  weights[CONFIG_T::n_in*CONFIG_T::n_out],
+    typename CONFIG_T::bias_t    biases[CONFIG_T::n_out])
+{
+  data_T data_temp[CONFIG_T::n_in];
+  res_T res_temp[CONFIG_T::n_out];
+  for (int bb = 0; bb < CONFIG_T::n_batch; bb++) {
+    for (int ii = 0; ii < CONFIG_T::n_in; ii++) {
+      data_temp[ii] = data[bb][ii];
+    }
+    //#pragma HLS ALLOCATION instances=compute_layer limit=10 
+    dense_latency<data_T, res_T, CONFIG_T>(data_temp, res_temp, weights, biases);
+    for (int ii = 0; ii < CONFIG_T::n_out; ii++) {
+      res[bb][ii] = res_temp[ii];
+    }
+  }
+}
 }
 
 #endif
