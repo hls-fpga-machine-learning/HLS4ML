@@ -3,8 +3,22 @@ import six
 import os
 import sys
 import re
+import string
 import numpy as np
 from collections import OrderedDict
+
+
+oneapi_padding1D_map_to_cpp = {
+    "valid": "{0}",
+    "same": "{0}",
+    "casual": "{1}"
+}
+
+oneapi_padding2D_map_to_cpp = {
+    "valid": "{0, 0}",
+    "same": "{0, 0}",
+    "casual": "{1, 1}"
+}
 
 class Quantizer(object):
     def __init__(self, bits, hls_type):
@@ -238,10 +252,12 @@ class Layer(object):
             self.outputs = [self.name]
 
         self.attributes = attributes
+        self.memory_descriptor = False
 
         self._function_template = self.model.config.backend.get_function_template(self.__class__.__name__)
         self._config_template = self.model.config.backend.get_config_template(self.__class__.__name__)
         self.include_list = self.model.config.backend.get_include_list(self.__class__.__name__)
+        self._memory_template = self.model.config.backend.get_config_template("Memory")
         self.weights = OrderedDict()
         self.variables = OrderedDict()
         self.precision = OrderedDict()
@@ -284,6 +300,16 @@ class Layer(object):
             output_name = self.outputs[0]
         return [node for node in self.model.graph.values() if node.inputs[0] == output_name]
 
+    @staticmethod
+    def get_input_node_with_mem_desc(node):
+        input_node = node.get_input_node()
+        if input_node is None:
+            return node
+        elif input_node.memory_descriptor:
+            return input_node
+        else:
+            return node.get_input_node_with_mem_desc(input_node)
+
     def get_output_variable(self, output_name=None):
         if output_name is not None:
             return self.variables[output_name]
@@ -295,6 +321,9 @@ class Layer(object):
             return self.weights[var_name]
 
         return self.weights.values()
+
+    def get_weights_precision(self):
+        return self.weights['weight'].type.precision
 
     def get_variables(self):
         return self.variables.values()
@@ -396,6 +425,63 @@ class Layer(object):
 
         return params
 
+    def _default_weight_params(self):
+        """Returns dict with default weight parameters for oneAPI project"""
+        params = {}
+        params["layer_name"] = self.name
+        params["memory_object"] = "weights"
+        params["memory_object_type"] = "auto"
+        input_dims = self.get_input_variable().shape
+        output_dims = self.get_output_variable().shape
+        if self.get_attr('data_format') == 'channels_first':
+            weight_dims = str(output_dims).replace('[','').replace(']','')
+            weight_dims += ", " + str(input_dims).replace('[','').replace(']','')
+        else:
+            weight_dims = str(output_dims[0]) + ", " + str(input_dims[-1])
+            if len(input_dims) > 1:
+                weight_dims += ',' + ','.join(map(str, input_dims[:-1]))
+        params["dims"] = weight_dims
+        params["data_type"] = self.get_weights_precision()
+        params["format_tag"] = string.ascii_lowercase[:len(input_dims)+len(output_dims)]
+
+        return params
+
+    def _conv_weight_params(self):
+        """Returns dict with convolutional weight parameters for oneAPI project"""
+        params = {}
+        params["layer_name"] = self.name
+        params["memory_object"] = "weights"
+        params["placeholder"] = "placeholder_"
+        params["memory_object_type"] = "auto"
+        input_dims = self.get_input_variable().shape
+        output_dims = self.get_output_variable().shape
+        weight_dims = str(output_dims[-1]) + ", " + str(input_dims[-1])
+        if self.get_attr('filt_height'):
+            weight_dims += ", " + str(self.get_attr('filt_height'))
+        weight_dims += ", " + str(self.get_attr('filt_width'))
+        params["dims"] = weight_dims
+        params["data_type"] = self.get_weights_precision()
+        params["format_tag"] = string.ascii_lowercase[:len(input_dims) + 1]
+
+        return params
+
+    def _default_bias_params(self):
+        """Returns dict with default bias parameters for oneAPI project"""
+        params = {}
+        params["layer_name"] = self.name
+        params["memory_object"] = "bias"
+        params["memory_object_type"] = "auto"
+        params["placeholder"] = ""
+        if self.get_attr('data_format') == 'channels_first':
+            bias_dim = self.get_output_variable().shape[0]
+        else:
+            bias_dim = self.get_output_variable().shape[-1]
+        params["dims"] = bias_dim
+        params["data_type"] = self.get_weights_precision()
+        params["format_tag"] = "x"
+
+        return params
+
     def get_layer_precision(self):
         return self.precision
 
@@ -436,6 +522,25 @@ class Input(Layer):
 
     def config_cpp(self):
         return None
+    
+    def definition_dcpp(self):
+        input_params = {}
+        input_params["layer_name"] = "input"
+        input_params["memory_object"] = "data"
+        input_params["memory_object_type"] = ""
+        input_params["placeholder"] = ""
+        batch_size = f"{self.model.batch_size}, "
+        input_dims = self.attributes['input_shape']
+        if self.get_attr('data_format') == 'channels_first':
+            input_params["dims"] = batch_size + str(input_dims).replace('[','').replace(']','')
+        else:
+            input_params["dims"] = batch_size + str(input_dims[-1])
+            if len(input_dims) > 1:
+                input_params["dims"] += ',' + ','.join(map(str, input_dims[:-1]))
+        input_params["data_type"] = "f32"
+        input_params["format_tag"] = string.ascii_lowercase[:len(input_dims)+1]
+
+        return self._memory_template.format(**input_params)
 
 class Reshape(Layer):
     def initialize(self):
@@ -477,11 +582,18 @@ class Dense(Layer):
         if self.model.config.is_resource_strategy(self):
             if self.model.config.get_compression(self):
                 index_t = self.get_weights('weight').type.index_precision
+            elif self.model.config.backend.name == 'Vivado':
+                self.weights['weight'].data = np.transpose(self.weights['weight'].data)
+        if self.model.config.backend.name == "oneAPI":
+            oneAPI_shape = self.get_input_variable().shape + [self.get_attr('n_out')]
+            reshaped_weights = self.weights['weight'].data.reshape(oneAPI_shape) # there is no Flatten layer in hls4ml model and oneAPI expects different weights format
+            if len(oneAPI_shape) > 3:
+                self.weights['weight'].data = np.transpose(reshaped_weights, axes=[3, 2, 0, 1]) # (H * W * I, O) => (O, I, H, W)
             else:
-                if self.model.config.backend.name == 'Vivado':
-                    self.weights['weight'].data = np.transpose(self.weights['weight'].data)
+                self.weights['weight'].data = np.transpose(reshaped_weights)
         self.set_attr('index_t', index_t)
         self.add_bias(quantizer=self.get_attr('bias_quantizer'))
+        self.memory_descriptor = True
 
     def function_cpp(self):
         params = self._default_function_params()
@@ -499,6 +611,33 @@ class Dense(Layer):
         params['nonzeros'] = self.get_weights('weight').nonzeros
 
         return self._config_template.format(**params)
+
+    def definition_dcpp(self):
+        """Returns oneAPI definition for Dense Layer"""
+        dense_params = {}
+        dense_params["layer_name"] = self.name
+        dense_params["memory_object_type"] = "" if "output" in self.name else "auto"
+        dense_params["data_type"] = self.get_weights_precision()
+        batch_size = f"{self.model.batch_size}, "
+        output_dims = self.get_output_variable().shape
+        dense_params["output_dims"] = batch_size + str(output_dims).replace('[','').replace(']','')
+        if self.get_input_node().index == 1:
+            dense_params["input_desc"] = "input_data_md"
+            dense_params["input_memory"] = "input_data_memory"
+        else:
+            input_layer = self.get_input_node_with_mem_desc(self)
+            dense_params["input_desc"] = f"{input_layer.name}_memory.get_desc()"
+            dense_params["input_memory"] = f"{input_layer.name}_memory"
+        dense_config = self._config_template.format(**dense_params)
+
+        weight_params = self._default_weight_params()
+        weight_params['placeholder'] = "placeholder_"
+        weight_config = self._memory_template.format(**weight_params)
+
+        bias_params = self._default_bias_params()
+        bias_config = self._memory_template.format(**bias_params)
+
+        return weight_config + bias_config + dense_config
 
 class Conv1D(Layer):
     def initialize(self):
@@ -519,6 +658,9 @@ class Conv1D(Layer):
                 self.weights['weight'].data = np.transpose(self.weights['weight'].data, axes=[2, 1, 0]) #(W,C,F) => (F,C,W)
         else:
             self.set_attr('strategy', 'latency')
+        if self.model.config.backend.name == "oneAPI":
+            self.weights['weight'].data = np.transpose(self.weights['weight'].data, axes=[2, 1, 0]) #(W,I,O) => (O,I,W)
+        self.memory_descriptor = True
 
     def function_cpp(self):
         params = self._default_function_params()
@@ -556,6 +698,34 @@ class Conv1D(Layer):
             return mult_config + '\n' + conv_config
         else:
             return self._config_template[0].format(**params)
+    
+    def definition_dcpp(self):
+        """Returns oneAPI definition for Conv1D Layer"""
+        conv1d_params = {}
+        conv1d_params["layer_name"] = self.name
+        conv1d_params["memory_object_type"] = "" if "output" in self.name else "auto"
+        conv1d_params["data_type"] = self.get_weights_precision()
+        batch_size = f"{self.model.batch_size}, "
+        output_dims = self.get_output_variable().shape
+        conv1d_params["output_dims"] = batch_size + str(output_dims[-1]) + ', ' + str(output_dims[0])
+        if self.get_input_node().index == 1:
+            conv1d_params["input_desc"] = "input_data_md"
+            conv1d_params["input_memory"] = "input_data_memory"
+        else:
+            input_layer = self.get_input_node_with_mem_desc(self)
+            conv1d_params["input_desc"] = f"{input_layer.name}_memory.get_desc()"
+            conv1d_params["input_memory"] = f"{input_layer.name}_memory"
+        conv1d_params["strides"] = '{' + str(self.get_attr('strides', "1")) + '}'
+        conv1d_params["padding"] = oneapi_padding1D_map_to_cpp[self.get_attr('padding', 'valid')]
+        conv1d_config = self._config_template.format(**conv1d_params)
+
+        weight_params = self._conv_weight_params()
+        weight_config = self._memory_template.format(**weight_params)
+
+        bias_params = self._default_bias_params()
+        bias_config = self._memory_template.format(**bias_params)
+
+        return weight_config + bias_config + conv1d_config
 
 class Conv2D(Layer):
     def initialize(self):
@@ -575,6 +745,9 @@ class Conv2D(Layer):
                 self.weights['weight'].data = np.transpose(self.weights['weight'].data, axes=[3, 2, 0, 1]) #(H,W,C,F) => (F,C,H,W)
         else:
             self.set_attr('strategy', 'latency')
+        if self.model.config.backend.name == "oneAPI":
+            self.weights['weight'].data = np.transpose(self.weights['weight'].data, axes=[3, 2, 0, 1]) # (H,W,I,O) => (O,I,H,W)
+        self.memory_descriptor = True
 
     def function_cpp(self):
         params = self._default_function_params()
@@ -618,12 +791,41 @@ class Conv2D(Layer):
         else:
             return self._config_template[0].format(**params)
 
+    def definition_dcpp(self):
+        """Returns oneAPI definition for Conv2D Layer"""
+        conv2d_params = {}
+        conv2d_params["layer_name"] = self.name
+        conv2d_params["memory_object_type"] = "" if "output" in self.name else "auto"
+        conv2d_params["data_type"] = self.get_weights_precision()
+        batch_size = f"{self.model.batch_size}, "
+        output_dims = self.get_output_variable().shape
+        conv2d_params["output_dims"] = batch_size + str(output_dims[-1]) + ', ' + str(output_dims[0]) + ', ' + str(output_dims[1])
+        if self.get_input_node().index == 1:
+            conv2d_params["input_desc"] = "input_data_md"
+            conv2d_params["input_memory"] = "input_data_memory"
+        else:
+            input_layer = self.get_input_node_with_mem_desc(self)
+            conv2d_params["input_desc"] = f"{input_layer.name}_memory.get_desc()"
+            conv2d_params["input_memory"] = f"{input_layer.name}_memory"
+        conv2d_params["strides"] = self.get_attr('stride', '{1, 1}')
+        conv2d_params["padding"] = oneapi_padding2D_map_to_cpp[self.get_attr('padding', 'valid')]
+        conv2d_config = self._config_template.format(**conv2d_params)
+
+        weight_params = self._conv_weight_params()
+        weight_config = self._memory_template.format(**weight_params)
+
+        bias_params = self._default_bias_params()
+        bias_config = self._memory_template.format(**bias_params)
+
+        return weight_config + bias_config + conv2d_config
+
 class Pooling1D(Layer):
     def initialize(self):
         shape = [self.attributes['n_out'], self.attributes['n_filt']]
         dims = ['N_OUTPUTS_{}'.format(self.index), 'N_FILT_{}'.format(self.index)]
         self.add_output_variable(shape, dims)
         self.set_attr('pool_op', self.get_attr('class_name').split('Pooling')[0])
+        self.memory_descriptor = True
 
     def function_cpp(self):
         params = self._default_function_params()
@@ -637,16 +839,43 @@ class Pooling1D(Layer):
 
         return self._config_template.format(**params)
 
+    def definition_dcpp(self):
+        """Returns oneAPI definition for Pooling1D"""
+        pool1d_params = {}
+        pool1d_params["layer_name"] = self.name
+        input_layer = self.get_input_node_with_mem_desc(self)
+        pool1d_params["input_desc"] = f"{input_layer.name}_memory.get_desc()"
+        pool1d_params["memory_object_type"] = "" if "output" in self.name else "auto"
+        pool1d_params["data_type"] = input_layer.get_weights_precision()
+        batch_size = f"{self.model.batch_size}, "
+        output_dims = self.get_output_variable().shape
+        pool1d_params["output_dims"] = batch_size + str(output_dims[-1]) + ', ' + str(output_dims[0])
+        pool1d_params["strides"] = '{' + str(self.get_attr('stride', '2')) + '}'
+        pool1d_params["padding"] = oneapi_padding1D_map_to_cpp[self.get_attr('padding', 'valid')]
+        pool1d_params["kernel"] = str(self.attributes['n_out'])
+        if self.get_input_node().index == 1:
+            pool1d_params["input_desc"] = "input_data_md"
+            pool1d_params["input_memory"] = "input_data_memory"
+        else:
+            input_layer = self.get_input_node_with_mem_desc(self)
+            pool1d_params["input_desc"] = f"{input_layer.name}_memory.get_desc()"
+            pool1d_params["input_memory"] = f"{input_layer.name}_memory"
+        pool1d_config = self._config_template.format(**pool1d_params)
+
+        return pool1d_config
+
 class Pooling2D(Layer):
     def initialize(self):
         shape = [self.attributes['out_height'], self.attributes['out_width'], self.attributes['n_filt']]
         dims = ['OUT_HEIGHT_{}'.format(self.index), 'OUT_WIDTH_{}'.format(self.index), 'N_FILT_{}'.format(self.index)]
         self.add_output_variable(shape, dims)
         self.set_attr('pool_op', self.get_attr('class_name').split('Pooling')[0])
+        self.memory_descriptor = True
 
     def function_cpp(self):
         params = self._default_function_params()
         params['data_format'] = 'cf' if self.get_attr('data_format') == 'channels_first' else 'cl'
+        
         return [self._function_template.format(**params)]
 
     def config_cpp(self):
@@ -658,6 +887,32 @@ class Pooling2D(Layer):
         params['n_filt'] = self.get_output_variable().dim_names[2]
 
         return self._config_template.format(**params)
+
+    def definition_dcpp(self):
+        """Returns oneAPI definition for Pooling2D"""
+        pool2d_params = {}
+        pool2d_params["layer_name"] = self.name
+        input_layer = self.get_input_node_with_mem_desc(self)
+        pool2d_params["input_desc"] = f"{input_layer.name}_memory.get_desc()"
+        pool2d_params["memory_object_type"] = "" if "output" in self.name else "auto"
+        pool2d_params["data_type"] = input_layer.get_weights_precision()
+        batch_size = f"{self.model.batch_size}, "
+        output_dims = self.get_output_variable().shape
+        pool2d_params["output_dims"] = batch_size + str(output_dims[-1]) + ', ' + str(output_dims[0]) + ', ' + str(output_dims[1])
+        pool2d_params["strides"] = self.get_attr('stride', '{2, 2}')
+        pool2d_params["padding"] = oneapi_padding2D_map_to_cpp[self.get_attr('padding', 'valid')]
+        pool2d_params["kernel"] = str(self.attributes['pool_height']) + ', ' +  str(self.attributes['pool_width'])
+        if self.get_input_node().index == 1:
+            pool2d_params["input_desc"] = "input_data_md"
+            pool2d_params["input_memory"] = "input_data_memory"
+        else:
+            input_layer = self.get_input_node_with_mem_desc(self)
+            pool2d_params["input_desc"] = f"{input_layer.name}_memory.get_desc()"
+            pool2d_params["input_memory"] = f"{input_layer.name}_memory"
+        pool2d_config = self._config_template.format(**pool2d_params)
+
+        return pool2d_config
+
 
 class Activation(Layer):
     def initialize(self):
@@ -682,6 +937,19 @@ class Activation(Layer):
         params = self._default_config_params()
         params['type'] = self.get_attr('activation')
         params['n_in'] = self.get_input_variable().size_cpp()
+
+        return self._config_template.format(**params)
+    
+    def definition_dcpp(self):
+        """Returns oneAPI definition for Activation Function"""
+        params = {}
+        params["type"] = self.get_attr('activation').lower()
+        params["layer_name"] = self.name
+        input_layer = self.get_input_node_with_mem_desc(self)
+        params["input_desc"] = f"{input_layer.name}_memory.get_desc()"
+        params["alpha"] = self.get_attr('activ_param', 0.0)
+        params["input_memory"] = f"{input_layer.name}_memory"
+        params["output_memory"] = f"{input_layer.name}_memory"
 
         return self._config_template.format(**params)
 
@@ -730,6 +998,18 @@ class Softmax(Activation):
             else:
                 self.set_attr('implementation', self.model.config.get_strategy(self).lower())
 
+    def definition_dcpp(self):
+        """Returns oneAPI definition for Activation Function"""
+        params = {}
+        params["layer_name"] = self.name
+        input_layer = self.get_input_node_with_mem_desc(self)
+        params["input_desc"] = f"{input_layer.name}_memory.get_desc()"
+        params["axis"] = self.get_attr('axis', 1)
+        params["input_memory"] = f"{input_layer.name}_memory"
+        params["output_memory"] = f"{input_layer.name}_memory"
+
+        return self._config_template.format(**params)
+        
 class BatchNormalization(Layer):
     def initialize(self):
         inp = self.get_input_variable()

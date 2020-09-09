@@ -5,16 +5,19 @@ import json
 import math
 from collections import OrderedDict
 
-def create_vivado_config(output_dir='my-hls-test', project_name='myproject',
-    fpga_part='xcku115-flvb2104-2-i', clock_period=5):
+def create_config(output_dir='my-hls-test', project_name='myproject', backend='Vivado',
+    device='xcku115-flvb2104-2-i', clock_period=5):
     
     config = {}
     
     config['OutputDir'] = output_dir
     config['ProjectName'] = project_name
-    config['XilinxPart'] = fpga_part
+    config['Backend'] = backend
+    if backend.lower() == "oneapi":
+        config["device"] = device
+    else:
+        config['XilinxPart'] = device
     config['ClockPeriod'] = clock_period
-    config['Backend'] = 'Vivado'
     config['IOType'] = 'io_parallel' # To become obsolete in the future
     config['HLSConfig'] = {}
 

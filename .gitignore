@@ -8,3 +8,4 @@ vivado_prj
 .vscode
 my-hls-test
 *.tar.gz
+*.ipynb_checkpoints
