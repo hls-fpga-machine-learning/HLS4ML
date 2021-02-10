@@ -5,6 +5,7 @@ from hls4ml.model.optimizer import OptimizerPass
 from hls4ml.model.hls_model import Layer, register_layer
 from hls4ml.templates import templates
 
+
 class Clone(Layer):
     ''' Inserted after the layer whose output is used more than once.'''
 
@@ -23,6 +24,7 @@ class Clone(Layer):
     def config_cpp(self):
         return None
 
+
 clone_function_template = 'nnet::clone_stream<{input_t}, {output_t}, {size}>({input}, {output1}, {output2});'
 clone_include_list = ['nnet_utils/nnet_stream.h']
 
@@ -35,6 +37,7 @@ templates.get_backend('Vivado').register_templates('Clone', clone_function_templ
 
 class CloneOutput(OptimizerPass):
     ''' Clones streams that are used multiple times '''
+
     def match(self, node):
         # We may have already inserted the Clone layer
         if node.__class__.__name__ == 'Clone':
@@ -44,7 +47,7 @@ class CloneOutput(OptimizerPass):
 
     def transform(self, model, node):
         if model.config.backend.name != 'Vivado' or \
-            model.config.get_config_value('IOType') != 'io_stream':
+                model.config.get_config_value('IOType') != 'io_stream':
             return False
 
         output_map = {}
@@ -64,12 +67,12 @@ class CloneOutput(OptimizerPass):
                 out_var = node.get_output_variable(output)
                 for i, layer in enumerate(output_map[output], 1):
                     attrs = {
-                        'size' : np.prod(out_var.shape)
+                        'size': np.prod(out_var.shape)
                     }
                     idx = layer.inputs.index(output)
                     layer.inputs[idx] = output + '_cpy' + str(i)
                 clone_layer = model.make_node('Clone', 'clone_' + node.name, attrs, [output], [output + '_cpy1', output + '_cpy2'])
                 model.insert_node(clone_layer)
                 transformed = True
-        
+
         return transformed

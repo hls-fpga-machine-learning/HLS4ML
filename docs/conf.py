@@ -10,11 +10,12 @@
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
+import datetime
 import os
 import sys
 sys.path.insert(0, os.path.abspath('../'))
 
-import datetime
+
 def get_version(rel_path):
     for line in open(rel_path):
         if line.startswith('__version__'):
@@ -24,6 +25,7 @@ def get_version(rel_path):
         raise RuntimeError("Unable to find version string.")
 
 # -- Project information -----------------------------------------------------
+
 
 project = 'hls4ml'
 copyright = str(datetime.datetime.now().year)+', Fast Machine Learning Lab'
@@ -73,7 +75,7 @@ html_logo = "img/hls4ml_logo_navbar.png"
 
 html_theme_options = {
     'canonical_url': '',
-    'analytics_id': '',  #  Provided by Google in your dashboard
+    'analytics_id': '',  # Provided by Google in your dashboard
     'logo_only': True,
     'display_version': True,
     'prev_next_buttons_location': 'bottom',

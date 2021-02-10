@@ -327,7 +327,6 @@ const config{index}::sublayer_t<{il}>::output_transform_biases_t (&config{index}
 garnet_stack_config_template = (garnet_stack_base_config_template, garnet_stack_sublayer_config_template)
 
 
-
 dense_function_template = 'nnet::dense<{input_t}, {output_t}, {config}>({input}, {output}, {w}, {b});'
 batchnorm_function_template = 'nnet::normalize<{input_t}, {output_t}, {config}>({input}, {output}, {scale}, {bias});'
 conv1d_function_template = 'nnet::conv_1d_{data_format}<{input_t}, {output_t}, {config}>({input}, {output}, {w}, {b});'
@@ -363,35 +362,50 @@ resize_include_list = ['nnet_utils/nnet_image.h', 'nnet_utils/nnet_image_stream.
 transpose_include_list = ['nnet_utils/nnet_array.h']
 garnet_include_list = ['nnet_utils/nnet_garnet.h']
 
+
 class VivadoBackend(Backend):
     def __init__(self):
         super(VivadoBackend, self).__init__('Vivado')
         self.register_templates('Dense', dense_function_template, dense_config_template, dense_include_list)
-        self.register_templates('BinaryDense'            , dense_function_template,       dense_config_template, dense_include_list)
-        self.register_templates('BatchNormalization'     , batchnorm_function_template,   batchnorm_config_template, batchnorm_include_list)
-        self.register_templates('Conv1D'                 , conv1d_function_template,      [conv1d_config_template, conv_mult_config_template], conv1d_include_list)
-        self.register_templates('Conv2D'                 , conv2d_function_template,      [conv2d_config_template, conv_mult_config_template], conv2d_include_list)
-        self.register_templates('SeparableConv1D'        , sepconv1d_function_template,   [sepconv_config_template, conv1d_config_template, conv1d_config_template, conv_mult_config_template, conv_mult_config_template], sepconv1d_include_list)
-        self.register_templates('SeparableConv2D'        , sepconv2d_function_template,   [sepconv_config_template, conv2d_config_template, conv2d_config_template, conv_mult_config_template, conv_mult_config_template], sepconv2d_include_list)
-        self.register_templates('DepthwiseConv2D'        , depthconv2d_function_template, [conv2d_config_template, conv_mult_config_template], sepconv2d_include_list)
-        self.register_templates('Activation'             , activ_function_template,       activ_config_template, activ_include_list)
-        self.register_templates('ParametrizedActivation' , param_activ_function_template, activ_config_template, activ_include_list)
-        self.register_templates('PReLU'                  , param_activ_function_template, activ_config_template, activ_include_list)
-        self.register_templates('Softmax'                , activ_function_template,       softmax_config_template, activ_include_list)
-        self.register_templates('Pooling1D'              , pooling1d_function_template,   pooling1d_config_template, pooling_include_list)
-        self.register_templates('Pooling2D'              , pooling2d_function_template,   pooling2d_config_template, pooling_include_list)
-        self.register_templates('GlobalPooling1D'        , global_pooling1d_function_template,   global_pooling1d_config_template, pooling_include_list)
-        self.register_templates('GlobalPooling2D'        , global_pooling2d_function_template,   global_pooling2d_config_template, pooling_include_list)
-        self.register_templates('ZeroPadding1D'          , zeropad1d_function_template,   zeropad1d_config_template, padding_include_list)
-        self.register_templates('ZeroPadding2D'          , zeropad2d_function_template,   zeropad2d_config_template, padding_include_list)
-        self.register_templates('Merge'                  , merge_function_template,       merge_config_template, merge_include_list)
-        self.register_templates('Concatenate'            , merge_function_template,       concat_config_template, merge_include_list)
-        self.register_templates('Dot'                    , merge_function_template,       dot_config_template, merge_include_list)
-        self.register_templates('Resize'                 , resize_function_template,      resize_config_template, resize_include_list)
-        self.register_templates('Transpose'              , transpose_function_template,   transpose_config_template, transpose_include_list)
-        self.register_templates('GarNet'                 , garnet_function_template,      garnet_config_template, garnet_include_list)
-        self.register_templates('GarNetStack'            , garnet_stack_function_template,garnet_stack_config_template, garnet_include_list)        
-    
+        self.register_templates('BinaryDense', dense_function_template,       dense_config_template, dense_include_list)
+        self.register_templates('BatchNormalization', batchnorm_function_template,   batchnorm_config_template, batchnorm_include_list)
+        self.register_templates('Conv1D', conv1d_function_template,      [conv1d_config_template, conv_mult_config_template], conv1d_include_list)
+        self.register_templates('Conv2D', conv2d_function_template,      [conv2d_config_template, conv_mult_config_template], conv2d_include_list)
+        self.register_templates('SeparableConv1D',
+                                sepconv1d_function_template,
+                                [sepconv_config_template,
+                                 conv1d_config_template,
+                                 conv1d_config_template,
+                                 conv_mult_config_template,
+                                 conv_mult_config_template],
+                                sepconv1d_include_list)
+        self.register_templates('SeparableConv2D',
+                                sepconv2d_function_template,
+                                [sepconv_config_template,
+                                 conv2d_config_template,
+                                 conv2d_config_template,
+                                 conv_mult_config_template,
+                                 conv_mult_config_template],
+                                sepconv2d_include_list)
+        self.register_templates('DepthwiseConv2D', depthconv2d_function_template, [conv2d_config_template, conv_mult_config_template], sepconv2d_include_list)
+        self.register_templates('Activation', activ_function_template,       activ_config_template, activ_include_list)
+        self.register_templates('ParametrizedActivation', param_activ_function_template, activ_config_template, activ_include_list)
+        self.register_templates('PReLU', param_activ_function_template, activ_config_template, activ_include_list)
+        self.register_templates('Softmax', activ_function_template,       softmax_config_template, activ_include_list)
+        self.register_templates('Pooling1D', pooling1d_function_template,   pooling1d_config_template, pooling_include_list)
+        self.register_templates('Pooling2D', pooling2d_function_template,   pooling2d_config_template, pooling_include_list)
+        self.register_templates('GlobalPooling1D', global_pooling1d_function_template,   global_pooling1d_config_template, pooling_include_list)
+        self.register_templates('GlobalPooling2D', global_pooling2d_function_template,   global_pooling2d_config_template, pooling_include_list)
+        self.register_templates('ZeroPadding1D', zeropad1d_function_template,   zeropad1d_config_template, padding_include_list)
+        self.register_templates('ZeroPadding2D', zeropad2d_function_template,   zeropad2d_config_template, padding_include_list)
+        self.register_templates('Merge', merge_function_template,       merge_config_template, merge_include_list)
+        self.register_templates('Concatenate', merge_function_template,       concat_config_template, merge_include_list)
+        self.register_templates('Dot', merge_function_template,       dot_config_template, merge_include_list)
+        self.register_templates('Resize', resize_function_template,      resize_config_template, resize_include_list)
+        self.register_templates('Transpose', transpose_function_template,   transpose_config_template, transpose_include_list)
+        self.register_templates('GarNet', garnet_function_template,      garnet_config_template, garnet_include_list)
+        self.register_templates('GarNetStack', garnet_stack_function_template, garnet_stack_config_template, garnet_include_list)
+
     def get_valid_reuse_factors(self, layer):
         n_in = 0
         n_out = 0
@@ -433,7 +447,7 @@ class VivadoBackend(Backend):
 
     def get_closest_reuse_factor(self, valid_rf, chosen_rf):
         """
-        Returns closest value to chosen_rf. valid_rf is sorted (obtained from get_valid_reuse_factors()) 
+        Returns closest value to chosen_rf. valid_rf is sorted (obtained from get_valid_reuse_factors())
         If two numbers are equally close, return the smallest number.
         """
         pos = bisect_left(valid_rf, chosen_rf)
@@ -454,7 +468,7 @@ class VivadoBackend(Backend):
         if chosen_rf not in valid_rf:
             closest_rf = self.get_closest_reuse_factor(valid_rf, chosen_rf)
             print('WARNING: Invalid ReuseFactor={} with "Resource" strategy in layer "{}". Using ReuseFactor={} instead. Valid ReuseFactor(s): {}.'
-                .format(chosen_rf, layer.name, closest_rf, ','.join(map(str, valid_rf))))
+                  .format(chosen_rf, layer.name, closest_rf, ','.join(map(str, valid_rf))))
             layer.reuse_factor = closest_rf
 
     def convert_precision_string(self, precision):
@@ -503,7 +517,7 @@ class VivadoBackend(Backend):
             # if binary
             if isinstance(weight_T, XnorPrecisionType) and isinstance(data_T, XnorPrecisionType):
                 product = 'both_binary'
-            elif isinstance(weight_T, XnorPrecisionType): # data is not xnor-binary
+            elif isinstance(weight_T, XnorPrecisionType):  # data is not xnor-binary
                 product = 'weight_binary'
             elif isinstance(weight_T, IntegerPrecisionType) and weight_T.width == 2 and weight_T.signed:
                 product = 'weight_ternary'
@@ -536,7 +550,7 @@ class VivadoBackend(Backend):
 
         for i in range(min_W):
             windows_int.append((int(''.join(str(p) for p in reversed(windows_bin[i])), 2)))
-        
+
         return (min_W, windows_int)
 
     def compute_conv2d_instructions(self, in_H, in_W, in_C, kernel_size=3, stride=1, pad=0):
@@ -579,15 +593,15 @@ class VivadoBackend(Backend):
         if kernel_height == 1 and kernel_width == 1 and stride == 1 and scaled_H == in_H and scaled_W == in_W:
             return (1, 1, map(str, [1]))
         if kernel_height == 3 and kernel_width == 3 and stride == 1 and scaled_H == in_H and scaled_W == in_W:
-            return (5, 5, map(str, [1,3,7,6,4,9,27,63,54,36,73,219,511,438,292,72,216,504,432,288,64,192,448,384,256]))
+            return (5, 5, map(str, [1, 3, 7, 6, 4, 9, 27, 63, 54, 36, 73, 219, 511, 438, 292, 72, 216, 504, 432, 288, 64, 192, 448, 384, 256]))
         if kernel_height == 5 and kernel_width == 5 and stride == 1 and scaled_H == in_H and scaled_W == in_W:
-            return (9, 9, map(str, [1,3,7,15,31,30,28,24,16,33,99,231,495,1023,990,924,792,528,1057,3171,7399,15855,
-                             32767,31710,29596,25368,16912,33825,101475,236775,507375,1048575,1014750,947100,
-                             811800,541200,1082401,3247203,7576807,16236015,33554431,32472030,30307228,25977624,
-                             17318416,1082400,3247200,7576800,16236000,33554400,32472000,30307200,25977600,17318400,
-                             1082368,3247104,7576576,16235520,33553408,32471040,30306304,25976832,17317888,1081344,
-                             3244032,7569408,16220160,33521664,32440320,30277632,25952256,17301504,1048576,3145728,
-                             7340032,15728640,32505856,31457280,29360128,25165824,16777216]))
+            return (9, 9, map(str, [1, 3, 7, 15, 31, 30, 28, 24, 16, 33, 99, 231, 495, 1023, 990, 924, 792, 528, 1057, 3171, 7399, 15855,
+                                    32767, 31710, 29596, 25368, 16912, 33825, 101475, 236775, 507375, 1048575, 1014750, 947100,
+                                    811800, 541200, 1082401, 3247203, 7576807, 16236015, 33554431, 32472030, 30307228, 25977624,
+                                    17318416, 1082400, 3247200, 7576800, 16236000, 33554400, 32472000, 30307200, 25977600, 17318400,
+                                    1082368, 3247104, 7576576, 16235520, 33553408, 32471040, 30306304, 25976832, 17317888, 1081344,
+                                    3244032, 7569408, 16220160, 33521664, 32440320, 30277632, 25952256, 17301504, 1048576, 3145728,
+                                    7340032, 15728640, 32505856, 31457280, 29360128, 25165824, 16777216]))
 
         windows_bin = [[0 for _ in range(kernel_height * kernel_width)] for _ in range(min_H * min_W)]
 
@@ -603,5 +617,5 @@ class VivadoBackend(Backend):
         for i in range(min_H):
             for j in range(min_W):
                 windows_int.append((int(''.join(str(p) for p in reversed(windows_bin[i * min_W + j])), 2)))
-        
+
         return (min_H, min_W, windows_int)

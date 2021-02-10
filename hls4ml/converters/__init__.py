@@ -59,12 +59,13 @@ def convert_from_yaml_config(yamlConfig):
             raise Exception("TensorFlow not found. Please install TensorFlow.")
     else:
         model = keras_to_hls(yamlConfig)
-    
+
     return model
 
+
 def convert_from_keras_model(model, output_dir='my-hls-test', project_name='myproject',
-    fpga_part='xcku115-flvb2104-2-i', clock_period=5, io_type='io_parallel', hls_config={}):
-    
+                             fpga_part='xcku115-flvb2104-2-i', clock_period=5, io_type='io_parallel', hls_config={}):
+
     config = create_vivado_config(
         output_dir=output_dir,
         project_name=project_name,
@@ -83,10 +84,10 @@ def convert_from_keras_model(model, output_dir='my-hls-test', project_name='mypr
         model_config['Precision'] = 'ap_fixed<16,6>'
         model_config['ReuseFactor'] = '1'
     config['HLSConfig']['Model'] = model_config
-    
+
     if 'LayerName' in hls_config:
         config['HLSConfig']['LayerName'] = hls_config['LayerName']
-    
+
     if 'LayerType' in hls_config:
         config['HLSConfig']['LayerType'] = hls_config['LayerType']
 
@@ -95,5 +96,5 @@ def convert_from_keras_model(model, output_dir='my-hls-test', project_name='mypr
 
     if 'SkipOptimizers' in hls_config:
         config['HLSConfig']['SkipOptimizers'] = hls_config['SkipOptimizers']
-    
+
     return keras_to_hls(config)

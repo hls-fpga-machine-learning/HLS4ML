@@ -2,6 +2,7 @@ from hls4ml.converters.keras_to_hls import parse_default_keras_layer
 from hls4ml.converters.keras_to_hls import keras_handler
 from hls4ml.converters.keras.core import TernaryQuantizer
 
+
 @keras_handler('GarNet', 'GarNetStack')
 def parse_garnet_layer(keras_layer, input_names, input_shapes, data_reader, config):
     assert(keras_layer['class_name'] in ['GarNet', 'GarNetStack'])
@@ -24,8 +25,8 @@ def parse_garnet_layer(keras_layer, input_names, input_shapes, data_reader, conf
         layer['quantizer'] = TernaryQuantizer()
 
     layer['n_aggregators'] = keras_layer['config']['n_aggregators']
-    layer['n_out_features'] = keras_layer['config']['n_filters'] # number of output features
-    layer['n_propagate'] = keras_layer['config']['n_propagate'] # number of latent features
+    layer['n_out_features'] = keras_layer['config']['n_filters']  # number of output features
+    layer['n_propagate'] = keras_layer['config']['n_propagate']  # number of latent features
 
     if layer['class_name'] == 'GarNet':
         layer['n_in_features'] = input_shapes[0][2]
@@ -39,7 +40,7 @@ def parse_garnet_layer(keras_layer, input_names, input_shapes, data_reader, conf
             layer['n_in_features'].append(layer['n_out_features'][il - 1])
 
         n_out_features = layer['n_out_features'][-1]
-        
+
     if layer['collapse'] in ['mean', 'sum', 'max']:
         output_shape = [input_shapes[0][0], n_out_features]
     else:

@@ -8,19 +8,20 @@ from hls4ml.model import HLSModel
 
 MAXMULT = 4096
 
+
 class ONNXDataReader:
     def __init__(self, model):
         self.model = model
         self.input_map = {}
         self.index_map = {
             # Dense
-            'kernel' : 1,
-            'bias'   : 2,
+            'kernel': 1,
+            'bias': 2,
             # BatchNormalization
-            'gamma'  : 1,
-            'beta'   : 2,
-            'moving_mean'   : 3,
-            'moving_variance' : 4,
+            'gamma': 1,
+            'beta': 2,
+            'moving_mean': 3,
+            'moving_variance': 4,
         }
 
     def get_weights_data(self, layer_name, var_name):
@@ -40,17 +41,18 @@ class ONNXDataReader:
                     data = data.transpose()
 
         return data
-    
+
     def add_input(self, layer_name, inputs, transpose=True, perm=None):
-        self.input_map[layer_name] = { 'inputs': inputs, 'transpose': transpose, 'perm': perm }
-    
+        self.input_map[layer_name] = {'inputs': inputs, 'transpose': transpose, 'perm': perm}
+
 
 def sanitize_layer_name(layer):
     new_name = layer['name']
     if new_name[0].isdigit():
         new_name = layer['class_name'].lower() + new_name
-    
+
     layer['name'] = new_name
+
 
 def get_onnx_attribute(operation, name, default=None):
     attr = next((x for x in operation.attribute if x.name == name), None)
@@ -62,9 +64,11 @@ def get_onnx_attribute(operation, name, default=None):
             value = value.decode()
     return value
 
+
 def get_input_shape(model, operation, input_idx=0):
     value_info_idx = next((i for i, x in enumerate(model.graph.value_info) if x.name == operation.input[input_idx]), 0)
     return [d.dim_value for d in model.graph.value_info[value_info_idx].type.tensor_type.shape.dim]
+
 
 def compute_pads_1d(operation, layer):
     auto_pad = get_onnx_attribute(operation, 'auto_pad', 'NOTSET')
@@ -80,24 +84,25 @@ def compute_pads_1d(operation, layer):
             pads = sorted(pads)
         elif auto_pad == 'SAME_LOWER':
             pads = sorted(pads, reverse=True)
-        else: # 'VALID' padding
+        else:  # 'VALID' padding
             pads = [0, 0]
     else:
         pads = get_onnx_attribute(operation, 'pads', [0, 0])
-    
+
     return pads
+
 
 def compute_pads_2d(operation, layer):
     auto_pad = get_onnx_attribute(operation, 'auto_pad', 'NOTSET')
     if auto_pad != 'NOTSET':
-        #Height
+        # Height
         if (layer['in_height'] % layer['stride_height'] == 0):
             pad_along_height = max(layer['filt_height'] - layer['stride_height'], 0)
         else:
             pad_along_height = max(layer['filt_height'] - (layer['in_height'] % layer['stride_height']), 0)
         pad_height = [pad_along_height // 2, pad_along_height - pad_along_height // 2]
 
-        #Width
+        # Width
         if (layer['in_width'] % layer['stride_width'] == 0):
             pad_along_width = max(layer['filt_width'] - layer['stride_width'], 0)
         else:
@@ -108,28 +113,29 @@ def compute_pads_2d(operation, layer):
             pads = [min(pad_height), min(pad_width), max(pad_height), max(pad_width)]
         elif auto_pad == 'SAME_LOWER':
             pads = [max(pad_height), max(pad_width), min(pad_height), min(pad_width)]
-        else: # 'VALID' padding
+        else:  # 'VALID' padding
             pads = [0, 0, 0, 0]
     else:
         pads = get_onnx_attribute(operation, 'pads', [0, 0, 0, 0])
-    
+
     return pads
+
 
 def onnx_to_hls(yamlConfig):
 
     ######################
-    ##  Do translation
+    # Do translation
     ######################
 
-    #This is a list of dictionaries to hold all the layer info we need to generate HLS
+    # This is a list of dictionaries to hold all the layer info we need to generate HLS
     layer_list = []
 
-    #Extract model architecture
+    # Extract model architecture
     model = ModelProto()
     with open(yamlConfig['OnnxModel'], 'rb') as fid:
         model.ParseFromString(fid.read())
-    
-    #Define supported layers
+
+    # Define supported layers
     core_operations = ['Gemm', 'BatchNormalization', 'Conv']
     transform_operations = ['Squeeze', 'Unsqueeze', 'Transpose', 'Flatten', 'Identity', 'Reshape']
     pool_operations = ['AveragePool', 'MaxPool']
@@ -137,24 +143,24 @@ def onnx_to_hls(yamlConfig):
     activation_operations = ['Relu', 'Tanh', 'Sigmoid', 'LeakyRelu', 'ThresholdedRelu', 'HardSigmoid', 'Elu', 'Selu', 'PRelu', 'Softmax', 'Softsign', 'Softplus']
     supported_operations = core_operations + transform_operations + pool_operations + merge_operations + activation_operations
 
-    operation_map = {'Gemm':'Dense', 'Relu':'Activation', 'Tanh':'Activation', 'Sigmoid':'Activation',
-    'LeakyRelu':'LeakyReLU', 'ThresholdedRelu':'ThresholdedReLU', 'HardSigmoid':'Activation',
-    'Elu':'ELU', 'Selu':'Activation', 'PRelu':'PReLU', 'Softmax':'Softmax', 'Softsign':'Activation', 'Softplus':'Activation',
-    'Sum':'Add', 'Sub':'Subtract', 'Max':'Maximum', 'Min':'Minimum', 'Mul':'Multiply', 'Concat':'Concatenate'}
-    
-    #Define layers to skip for conversion to HLS
-    skip_layers = ['Squeeze', 'Unsqueeze', 'Dropout', 'Identity', 'Flatten', 'Transpose', 'Reshape'] 
-    #Map inputs of skipped layers
+    operation_map = {'Gemm': 'Dense', 'Relu': 'Activation', 'Tanh': 'Activation', 'Sigmoid': 'Activation',
+                     'LeakyRelu': 'LeakyReLU', 'ThresholdedRelu': 'ThresholdedReLU', 'HardSigmoid': 'Activation',
+                     'Elu': 'ELU', 'Selu': 'Activation', 'PRelu': 'PReLU', 'Softmax': 'Softmax', 'Softsign': 'Activation', 'Softplus': 'Activation',
+                     'Sum': 'Add', 'Sub': 'Subtract', 'Max': 'Maximum', 'Min': 'Minimum', 'Mul': 'Multiply', 'Concat': 'Concatenate'}
+
+    # Define layers to skip for conversion to HLS
+    skip_layers = ['Squeeze', 'Unsqueeze', 'Dropout', 'Identity', 'Flatten', 'Transpose', 'Reshape']
+    # Map inputs of skipped layers
     inputs_map = {}
 
     passes = ['fuse_transpose_into_gemm', 'fuse_matmul_add_bias_into_gemm', 'eliminate_nop_transpose', 'fuse_consecutive_transposes']
-    model = shape_inference.infer_shapes(model) # have to infer shapes before optimizing the model
+    model = shape_inference.infer_shapes(model)  # have to infer shapes before optimizing the model
     model = optimizer.optimize(model, passes)
-    model = shape_inference.infer_shapes(model) # have to infer shapes before optimizing the model
-    
+    model = shape_inference.infer_shapes(model)  # have to infer shapes before optimizing the model
+
     reader = ONNXDataReader(model)
 
-    #Loop through layers
+    # Loop through layers
     layer_counter = 0
     all_inputs = [x.name for x in model.graph.input]
     all_initializers = [x.name for x in model.graph.initializer]
@@ -180,7 +186,7 @@ def onnx_to_hls(yamlConfig):
     for operation in model.graph.node:
         if operation.op_type not in supported_operations:
             raise Exception('ERROR: Unsupported operation type: {}'.format(operation.op_type))
-    
+
     # Get input shape
     current_shape = [d.dim_value for d in model.graph.input[0].type.tensor_type.shape.dim]
     print('Input shape:', current_shape)
@@ -190,103 +196,103 @@ def onnx_to_hls(yamlConfig):
         if operation.op_type == 'Flatten':
             current_shape = [current_shape[0], np.prod(current_shape[1:])]
         if operation.op_type in skip_layers:
-            #Currently supported skipped layers have only one input and output
-            #Skipped layers can follow each other (e.g., Dropout -> Flatten)
+            # Currently supported skipped layers have only one input and output
+            # Skipped layers can follow each other (e.g., Dropout -> Flatten)
             input_name = inputs_map.get(operation.input[0], operation.input[0])
             output_name = operation.output[0]
             inputs_map[output_name] = input_name
-            continue 
+            continue
 
         if operation.op_type in supported_operations:
             layer_counter = layer_counter + 1
 
-        #Dictionary to fill in and append to layer_list
+        # Dictionary to fill in and append to layer_list
         layer = {}
 
-        #Extract name for finding weights and biases
+        # Extract name for finding weights and biases
         if operation.name:
             layer['name'] = operation.name
         else:
             layer['name'] = operation.op_type + str(layer_counter)
         layer['class_name'] = operation_map.get(operation.op_type, operation.op_type)
-        layer['inputs'] = [ inputs_map.get(operation.input[0], operation.input[0]) ]
+        layer['inputs'] = [inputs_map.get(operation.input[0], operation.input[0])]
         layer['outputs'] = [x for x in operation.output]
 
-        #Extract type of activation
+        # Extract type of activation
         if operation.op_type in activation_operations:
             layer['activation'] = operation.op_type.lower()
             if layer_list[-1]['class_name'] != 'BatchNormalization':
                 layer_list[-1]['activation'] = operation.op_type.lower()
-        
-        #Get number of inputs and outputs
-        #(We take it from the weights to avoid dealing with InputLayer and Flatten details)
+
+        # Get number of inputs and outputs
+        # (We take it from the weights to avoid dealing with InputLayer and Flatten details)
         if layer['class_name'] == 'Dense':
             current_shape = get_input_shape(model, operation)
             layer['n_in'] = next((x.type.tensor_type.shape.dim[-1].dim_value for x in model.graph.input if x.name == operation.input[0]), None)
             layer['n_out'] = next((x.type.tensor_type.shape.dim[-1].dim_value for x in model.graph.value_info if x.name == operation.output[0]), None)
             tran_weight = get_onnx_attribute(operation, 'transB', 0)
             reader.add_input(layer['name'], operation.input, tran_weight)
-            
+
             current_shape = [current_shape[0], layer['n_out']]
-        elif layer['class_name']=='Conv':
+        elif layer['class_name'] == 'Conv':
             current_shape = get_input_shape(model, operation)
             strides = get_onnx_attribute(operation, 'strides')
             kernel_shape = get_onnx_attribute(operation, 'kernel_shape')
 
-            if len(current_shape) == 3: # Conv1D
+            if len(current_shape) == 3:  # Conv1D
                 layer['class_name'] = 'Conv1D'
                 reader.add_input(layer['name'], operation.input)
 
-                layer['in_width']=current_shape[2]
-                layer['filt_width']=kernel_shape[0]
-                layer['n_chan']=current_shape[1]
-                layer['n_filt']=next((x.type.tensor_type.shape.dim[1].dim_value for x in model.graph.value_info if x.name == operation.output[0]), None)
-                layer['stride_width']=strides[0]
+                layer['in_width'] = current_shape[2]
+                layer['filt_width'] = kernel_shape[0]
+                layer['n_chan'] = current_shape[1]
+                layer['n_filt'] = next((x.type.tensor_type.shape.dim[1].dim_value for x in model.graph.value_info if x.name == operation.output[0]), None)
+                layer['stride_width'] = strides[0]
                 pads = compute_pads_1d(operation, layer)
 
                 layer['pad_left'] = pads[0]
                 layer['pad_right'] = pads[1]
-                if all(x == 0 for x in pads): # No padding, i.e., 'VALID' padding
+                if all(x == 0 for x in pads):  # No padding, i.e., 'VALID' padding
                     layer['out_width'] = int(math.ceil(float(layer['in_width'] - layer['filt_width'] + 1) / float(layer['stride'])))
                 else:
                     layer['out_width'] = int(math.ceil(float(layer['in_width']) / float(layer['stride'])))
 
                 layer['data_format'] = 'channels_first'
 
-                current_shape=[current_shape[0], layer['n_filt'], layer['out_width']]
-            elif len(current_shape) == 4: # Conv2D
+                current_shape = [current_shape[0], layer['n_filt'], layer['out_width']]
+            elif len(current_shape) == 4:  # Conv2D
                 layer['class_name'] = 'Conv2D'
                 reader.add_input(layer['name'], operation.input, transpose=True, perm=[2, 3, 1, 0])
 
-                layer['in_height']=current_shape[2]
-                layer['in_width']=current_shape[3]
-                layer['filt_height']=kernel_shape[0]
-                layer['filt_width']=kernel_shape[1]
-                layer['n_chan']=current_shape[1]
-                layer['n_filt']=next((x.type.tensor_type.shape.dim[1].dim_value for x in model.graph.value_info if x.name == operation.output[0]), None)
+                layer['in_height'] = current_shape[2]
+                layer['in_width'] = current_shape[3]
+                layer['filt_height'] = kernel_shape[0]
+                layer['filt_width'] = kernel_shape[1]
+                layer['n_chan'] = current_shape[1]
+                layer['n_filt'] = next((x.type.tensor_type.shape.dim[1].dim_value for x in model.graph.value_info if x.name == operation.output[0]), None)
                 layer['stride_height'] = strides[0]
                 layer['stride_width'] = strides[1]
                 pads = compute_pads_2d(operation, layer)
-                
+
                 layer['pad_top'] = pads[0]
                 layer['pad_bottom'] = pads[2]
                 layer['pad_left'] = pads[1]
                 layer['pad_right'] = pads[3]
 
-                if all(x == 0 for x in pads): # No padding, i.e., 'VALID' padding in Keras/Tensorflow
+                if all(x == 0 for x in pads):  # No padding, i.e., 'VALID' padding in Keras/Tensorflow
                     layer['out_width'] = int(math.ceil(float(layer['in_width'] - layer['filt_width'] + 1) / float(layer['stride_width'])))
                     layer['out_height'] = int(math.ceil(float(layer['in_height'] - layer['filt_height'] + 1) / float(layer['stride_height'])))
                 else:
                     layer['out_height'] = int(math.ceil(float(layer['in_height']) / float(layer['stride_height'])))
                     layer['out_width'] = int(math.ceil(float(layer['in_width']) / float(layer['stride_width'])))
-                
-                current_shape=[current_shape[0], layer['n_filt'], layer['out_height'], layer['out_width']]
-        elif layer['class_name']=='BatchNormalization':
+
+                current_shape = [current_shape[0], layer['n_filt'], layer['out_height'], layer['out_width']]
+        elif layer['class_name'] == 'BatchNormalization':
             layer['epsilon'] = get_onnx_attribute(operation, 'epsilon')
             layer['momentum'] = get_onnx_attribute(operation, 'momentum')
-            
+
             reader.add_input(layer['name'], operation.input)
-            
+
             in_size = 1
             for dim in current_shape[1:]:
                 in_size *= dim
@@ -295,13 +301,13 @@ def onnx_to_hls(yamlConfig):
             if len(current_shape) == 2:
                 layer['n_filt'] = -1
             else:
-                layer['n_filt']=current_shape[1]
+                layer['n_filt'] = current_shape[1]
         elif layer['class_name'] in pool_operations:
             current_shape = get_input_shape(model, operation)
             info = layer['class_name'].replace('Pool', '')
             strides = get_onnx_attribute(operation, 'strides')
             kernel_shape = get_onnx_attribute(operation, 'kernel_shape')
-            if len(current_shape) == 3: # 1D
+            if len(current_shape) == 3:  # 1D
                 layer['class_name'] = info + 'Pooling1D'
                 layer['stride'] = strides[0]
                 layer['pool_size'] = layer['y_filt'] = kernel_shape[0]
@@ -309,31 +315,31 @@ def onnx_to_hls(yamlConfig):
                 layer['pad_left'] = pads[0]
                 layer['pad_right'] = pads[1]
 
-                if all(x == 0 for x in pads): # No padding, i.e., 'VALID' padding
+                if all(x == 0 for x in pads):  # No padding, i.e., 'VALID' padding
                     layer['n_out'] = int(math.ceil(float(layer['y_in'] - layer['y_filt'] + 1) / float(layer['stride'])))
                 else:
                     layer['n_out'] = int(math.ceil(float(layer['y_in']) / float(layer['stride'])))
 
-                current_shape=[current_shape[0], layer['n_filt'], layer['n_out']]
-            elif len(current_shape) == 4: # 2D
+                current_shape = [current_shape[0], layer['n_filt'], layer['n_out']]
+            elif len(current_shape) == 4:  # 2D
                 layer['class_name'] = info + 'Pooling2D'
-                
+
                 layer['n_filt'] = current_shape[1]
                 layer['in_height'] = current_shape[2]
                 layer['in_width'] = current_shape[3]
-                
+
                 layer['stride_height'] = strides[0]
                 layer['stride_width'] = strides[1]
                 layer['pool_height'] = layer['filt_height'] = kernel_shape[0]
                 layer['pool_width'] = layer['filt_width'] = kernel_shape[1]
-                
+
                 pads = compute_pads_2d(operation, layer)
                 layer['pad_top'] = pads[0]
                 layer['pad_bottom'] = pads[2]
                 layer['pad_left'] = pads[1]
                 layer['pad_right'] = pads[3]
 
-                if all(x == 0 for x in pads): # No padding, i.e., 'VALID' padding in Keras/Tensorflow
+                if all(x == 0 for x in pads):  # No padding, i.e., 'VALID' padding in Keras/Tensorflow
                     layer['out_width'] = int(math.ceil(float(layer['in_width'] - layer['filt_width'] + 1) / float(layer['stride_width'])))
                     layer['out_height'] = int(math.ceil(float(layer['in_height'] - layer['filt_height'] + 1) / float(layer['stride_height'])))
                 else:
@@ -341,11 +347,11 @@ def onnx_to_hls(yamlConfig):
                     layer['out_width'] = int(math.ceil(float(layer['in_width']) / float(layer['stride_width'])))
 
                 layer['n_out'] = layer['out_height'] * layer['out_height'] * layer['n_filt']
-                current_shape=[current_shape[0], layer['n_filt'], layer['out_height'], layer['out_width']]
+                current_shape = [current_shape[0], layer['n_filt'], layer['out_height'], layer['out_width']]
         elif layer['class_name'] in ['ELU', 'LeakyReLU', 'ThresholdedReLU']:
             layer['activation'] = layer['class_name']
             layer['activ_param'] = get_onnx_attribute(operation, 'alpha', 0.01)
-        elif layer['class_name']=='PReLU':
+        elif layer['class_name'] == 'PReLU':
             layer['activation'] = layer['class_name']
 
         elif layer['class_name'] in [operation_map.get(op, op) for op in merge_operations]:
@@ -364,11 +370,10 @@ def onnx_to_hls(yamlConfig):
 
         sanitize_layer_name(layer)
         print('Layer name: {}, layer type: {}, current shape: {}'.format(layer['name'], layer['class_name'], current_shape))
-        layer_list.append( layer )
-
+        layer_list.append(layer)
 
     #################
-    ## Generate HLS
+    # Generate HLS
     #################
 
     print('Creating HLS model')

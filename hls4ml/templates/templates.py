@@ -23,13 +23,16 @@ class Backend(object):
     def register_source(self, file_name, source, destination_dir='nnet_utils'):
         raise NotImplementedError
 
+
 backend_map = {}
+
 
 def register_backend(name, backend_cls):
     if name in backend_map:
         raise Exception('Backend {} already registered'.format(name))
-    
+
     backend_map[name] = backend_cls()
+
 
 def get_backend(name):
     return backend_map[name]

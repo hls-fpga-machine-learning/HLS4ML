@@ -1,5 +1,6 @@
 from hls4ml.model.optimizer import OptimizerPass
 
+
 class FuseBatchNormalization(OptimizerPass):
     def match(self, node):
         is_match = node.__class__.__name__ == 'BatchNormalization' and \

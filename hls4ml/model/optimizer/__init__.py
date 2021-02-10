@@ -35,5 +35,4 @@ register_pass('reshape_stream', ReshapeStream)
 if __qkeras_optimizers__:
     register_pass('output_rounding_saturation_mode', OutputRoundingSaturationMode)
     register_pass('qkeras_factorize_alpha', QKerasFactorizeAlpha)
-    register_pass('fuse_consecutive_batch_normalization', FuseConsecutiveBatchNormalization) 
-
+    register_pass('fuse_consecutive_batch_normalization', FuseConsecutiveBatchNormalization)

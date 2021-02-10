@@ -5,17 +5,20 @@ from hls4ml.model.optimizer import OptimizerPass
 from hls4ml.model.hls_model import Conv1D, Conv2D, register_layer
 from hls4ml.templates import templates
 
+
 class PointwiseConv1D(Conv1D):
     ''' Optimized Conv1D implementation for 1x1 kernels. '''
 
     # Nothing to do, will pick up function and config from class name
     pass
 
+
 class PointwiseConv2D(Conv2D):
     ''' Optimized Conv2D implementation for 1x1 kernels. '''
 
     # Nothing to do, will pick up function and config from class name
     pass
+
 
 pointwise_conv1d_function_template = 'nnet::pointwise_conv_1d_{data_format}<{input_t}, {output_t}, {config}>({input}, {output}, {w}, {b});'
 pointwise_conv2d_function_template = 'nnet::pointwise_conv_2d_{data_format}<{input_t}, {output_t}, {config}>({input}, {output}, {w}, {b});'
@@ -42,6 +45,7 @@ templates.get_backend('Vivado').register_templates(
     sepconv2d_include_list
 )
 
+
 class OptimizePointwiseConv(OptimizerPass):
     def match(self, node):
         return node.__class__.__name__ in ['Conv1D', 'Conv2D'] and \
@@ -49,8 +53,8 @@ class OptimizePointwiseConv(OptimizerPass):
             node.get_attr('filt_width') == 1
 
     def transform(self, model, node):
-        dim = node.__class__.__name__[-2:] # '1D' or '2D'
+        dim = node.__class__.__name__[-2:]  # '1D' or '2D'
         pw_node = model.make_node('PointwiseConv' + dim, node.name, node.attributes.copy(), node.inputs.copy())
         model.replace_node(node, pw_node)
-        
+
         return True
