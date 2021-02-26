@@ -15,6 +15,7 @@ from hls4ml.writer import get_writer
 from hls4ml.model.optimizer import optimize_model, get_available_passes
 from hls4ml.report.vivado_report import parse_vivado_report
 
+
 class HLSConfig(object):
     def __init__(self, config):
         self.config = config
@@ -146,7 +147,7 @@ class HLSConfig(object):
 
     def _parse_hls_config(self):
         hls_config = self.config['HLSConfig']
-        
+
         self.optimizers = hls_config.get('Optimizers')
         if 'SkipOptimizers' in hls_config:
             if self.optimizers is not None:
@@ -157,9 +158,9 @@ class HLSConfig(object):
                 try:
                     selected_optimizers.remove(opt)
                 except ValueError:
-                    pass                
+                    pass
             self.optimizers = selected_optimizers
-        
+
         model_cfg = hls_config.get('Model')
         if model_cfg is not None:
             precision_cfg = model_cfg.get('Precision')
@@ -168,7 +169,7 @@ class HLSConfig(object):
                     for var, precision in precision_cfg.items():
                         self.model_precision[var] = precision
                 else:
-                    self.model_precision['default'] = precision_cfg # Default precision for everything
+                    self.model_precision['default'] = precision_cfg  # Default precision for everything
 
             self.model_rf = model_cfg.get('ReuseFactor')
             self.model_strategy = model_cfg.get('Strategy', 'Latency')
@@ -247,6 +248,7 @@ class HLSConfig(object):
             print('WARNING: Changing model strategy to "Resource"')
             self.model_strategy = 'Resource'
 
+
 class HLSModel(object):
     def __init__(self, config, data_reader, layer_list, inputs=None, outputs=None):
         self.config = HLSConfig(config)
@@ -317,7 +319,7 @@ class HLSModel(object):
             next_node = next((x for x in self.graph.values() if node.outputs[0] in x.inputs), None)
             if prev_node is not None:
                 if next_node is not None:
-                    for i,_ in enumerate(next_node.inputs):
+                    for i, _ in enumerate(next_node.inputs):
                         if node.outputs[0] == next_node.inputs[i]:
                             next_node.inputs[i] = prev_node.outputs[0]
                             break
@@ -338,7 +340,7 @@ class HLSModel(object):
         if next_node is not None:
             next_node.inputs[0] = new_node.outputs[0]
         if prev_node is not None:
-            if new_node.inputs is None or len(new_node.inputs) == 0: # Check if already rewired
+            if new_node.inputs is None or len(new_node.inputs) == 0:  # Check if already rewired
                 new_node.inputs = [prev_node.outputs[0]]
 
         self.graph = OrderedDict((new_node.name, new_node) if k == old_node.name else (k, v) for k, v in self.graph.items())
@@ -379,7 +381,7 @@ class HLSModel(object):
             from random import choice
             length = 8
             return ''.join(choice(hexdigits) for m in range(length))
-        
+
         self.config.config['Stamp'] = make_stamp()
 
         self.config.writer.write_hls(self)
@@ -431,7 +433,7 @@ class HLSModel(object):
 
         top_function.restype = None
         top_function.argtypes = [npc.ndpointer(ctype, flags="C_CONTIGUOUS"), npc.ndpointer(ctype, flags="C_CONTIGUOUS"),
-            ctypes.POINTER(ctypes.c_ushort), ctypes.POINTER(ctypes.c_ushort)]
+                                 ctypes.POINTER(ctypes.c_ushort), ctypes.POINTER(ctypes.c_ushort)]
 
         return top_function, ctype
 
@@ -461,7 +463,7 @@ class HLSModel(object):
                 top_function(x[i], predictions, ctypes.byref(ctypes.c_ushort()), ctypes.byref(ctypes.c_ushort()))
                 output.append(predictions)
 
-            #Convert to numpy array
+            # Convert to numpy array
             output = np.asarray(output)
         finally:
             os.chdir(curr_dir)
@@ -529,7 +531,7 @@ class HLSModel(object):
             for key in trace_output.keys():
                 trace_output[key] = np.asarray(trace_output[key])
 
-            #Convert to numpy array
+            # Convert to numpy array
             output = np.asarray(output)
 
             free_func()
@@ -563,8 +565,7 @@ class HLSModel(object):
         curr_dir = os.getcwd()
         os.chdir(self.config.get_output_dir())
         os.system('vivado_hls -f build_prj.tcl "reset={reset} csim={csim} synth={synth} cosim={cosim} validation={validation} export={export} vsynth={vsynth}"'
-            .format(reset=reset, csim=csim, synth=synth, cosim=cosim, validation=validation, export=export, vsynth=vsynth))
+                  .format(reset=reset, csim=csim, synth=synth, cosim=cosim, validation=validation, export=export, vsynth=vsynth))
         os.chdir(curr_dir)
 
         return parse_vivado_report(self.config.get_output_dir())
-

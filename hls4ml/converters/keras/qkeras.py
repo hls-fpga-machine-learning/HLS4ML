@@ -5,6 +5,7 @@ from qkeras.quantizers import get_quantizer
 import tensorflow as tf
 import numpy as np
 
+
 class QKerasQuantizer(Quantizer):
     def __init__(self, config):
         self.quantizer_fn = get_quantizer(config)
@@ -24,11 +25,12 @@ class QKerasQuantizer(Quantizer):
             print("Unsupported quantizer: " + config['class_name'])
             self.bits = 16
             self.hls_type = FixedPrecisionType(width=16, integer=6, signed=True)
-    
+
     def __call__(self, data):
         tf_data = tf.convert_to_tensor(data)
         return self.quantizer_fn(tf_data).numpy()
-        #return self.quantizer_fn(data)
+        # return self.quantizer_fn(data)
+
 
 class QKerasBinaryQuantizer(object):
     def __init__(self, config, xnor=False):
@@ -44,6 +46,7 @@ class QKerasBinaryQuantizer(object):
         x = tf.convert_to_tensor(data)
         y = self.quantizer_fn(x).numpy()
         return self.binary_quantizer(y)
+
 
 class QKerasPO2Quantizer(object):
     def __init__(self, config):
@@ -61,6 +64,7 @@ class QKerasPO2Quantizer(object):
             y = y.numpy()
         return y
 
+
 def get_type(quantizer_config):
     width = quantizer_config['config']['bits']
     integer = quantizer_config['config'].get('integer', 0)
@@ -74,6 +78,7 @@ def get_type(quantizer_config):
     else:
         return FixedPrecisionType(width=width+1, integer=integer+1, signed=True)
 
+
 def get_quantizer_from_config(keras_layer, quantizer_var):
     quantizer_config = keras_layer['config']['{}_quantizer'.format(quantizer_var)]
     if keras_layer['class_name'] == 'QBatchNormalization':
@@ -84,4 +89,3 @@ def get_quantizer_from_config(keras_layer, quantizer_var):
         return QKerasPO2Quantizer(quantizer_config)
     else:
         return QKerasQuantizer(quantizer_config)
-

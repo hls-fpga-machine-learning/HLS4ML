@@ -9,6 +9,7 @@ import re
 
 from hls4ml.model import HLSModel
 
+
 class PyTorchDataReader:
     def __init__(self, config):
         self.config = config
@@ -19,7 +20,7 @@ class PyTorchDataReader:
             self.torch_model = torch.load(config['PytorchModel'])
 
         self.state_dict = self.torch_model.state_dict()
-    
+
     def get_weights_data(self, layer_name, var_name):
         if var_name == 'kernel':
             var_name = 'weight'
@@ -29,10 +30,11 @@ class PyTorchDataReader:
 
         return data
 
+
 def pytorch_to_hls(yamlConfig):
 
     ######################
-    ##  Do translation
+    # Do translation
     ######################
 
     print('Interpreting Model')
@@ -43,23 +45,23 @@ def pytorch_to_hls(yamlConfig):
     activation_layers = ['ReLU', 'Sigmoid', 'Tanh', 'SELU', 'LeakyReLU', 'Softmax', 'Softplus', 'Softsign']
     supported_layers = core_layers + skip_layers + activation_layers
 
-    #This is a list of dictionaries to hold all the layer info we need to generate HLS
+    # This is a list of dictionaries to hold all the layer info we need to generate HLS
     layer_list = []
 
-    #Loop through layers
+    # Loop through layers
     print('Topology:')
     modelstr = repr(reader.torch_model).split('\n')
     for pytorch_layer in modelstr:
         layer_match = re.match(r'\((\d)\): (\w+)\((.*)\)', pytorch_layer.strip())
         if layer_match is None:
             continue
-        
-        layer_idx  = layer_match.group(1)
+
+        layer_idx = layer_match.group(1)
         layer_type = layer_match.group(2)
         layer_spec = layer_match.group(3)
 
         # #Dictionary to fill in and append to layer_list
-        layer={}
+        layer = {}
 
         #layer_type = matchname.group(1)
         if layer_type not in supported_layers:
@@ -95,9 +97,8 @@ def pytorch_to_hls(yamlConfig):
     input_layer['input_shape'] = [layer_list[0]['n_in']]
     layer_list.insert(0, input_layer)
 
-
     #################
-    ## Generate HLS
+    # Generate HLS
     #################
 
     reader = PyTorchDataReader(yamlConfig)

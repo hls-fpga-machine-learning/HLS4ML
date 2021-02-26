@@ -3,6 +3,7 @@ import os
 import re
 import xml.etree.ElementTree as ET
 
+
 def read_vivado_report(hls_dir, full_report=False):
     if not os.path.exists(hls_dir):
         print('Path {} does not exist. Exiting.'.format(hls_dir))
@@ -30,6 +31,7 @@ def read_vivado_report(hls_dir, full_report=False):
         print('Reports for solution "{}":\n'.format(sln))
         _find_reports(sln_dir + '/' + sln, top_func_name, full_report)
 
+
 def _parse_build_script(script_path):
     prj_dir = None
     top_func_name = None
@@ -42,6 +44,7 @@ def _parse_build_script(script_path):
                 top_func_name = line.split()[-1]
 
     return prj_dir, top_func_name
+
 
 def _find_solutions(sln_dir):
     solutions = []
@@ -58,6 +61,7 @@ def _find_solutions(sln_dir):
                 solutions.append(sln_name)
 
     return solutions
+
 
 def _find_reports(sln_dir, top_func_name, full_report=False):
     csim_file = sln_dir + '/csim/report/{}_csim.log'.format(top_func_name)
@@ -78,10 +82,12 @@ def _find_reports(sln_dir, top_func_name, full_report=False):
     else:
         print('Co-simulation report not found.')
 
+
 def _show_csim_report(csim_file):
     with open(csim_file, 'r') as f:
         print('C SIMULATION RESULT:')
         print(f.read())
+
 
 def _show_synth_report(synth_file, full_report=False):
     with open(synth_file, 'r') as f:
@@ -89,12 +95,14 @@ def _show_synth_report(synth_file, full_report=False):
         for line in f.readlines()[2:]:
             if not full_report and '* DSP48' in line:
                 break
-            print(line, end = '')
+            print(line, end='')
+
 
 def _show_cosim_report(cosim_file):
     with open(cosim_file, 'r') as f:
         print('CO-SIMULATION RESULT:')
         print(f.read())
+
 
 def parse_vivado_report(hls_dir):
     if not os.path.exists(hls_dir):
@@ -163,7 +171,7 @@ def parse_vivado_report(hls_dir):
         with open(cosim_file, 'r') as f:
             for line in f.readlines():
                 if re.search('VHDL', line) or re.search('Verilog', line):
-                    result = line[1:].split() # [1:] skips the leading '|'
+                    result = line[1:].split()  # [1:] skips the leading '|'
                     result = [res[:-1] if res[-1] == '|' else res for res in result]
                     # RTL, Status, Latency-min, Latency-avg, Latency-max, Interval-min, Interval-avg, Interval-max
                     if result[1] == 'NA':
@@ -177,4 +185,3 @@ def parse_vivado_report(hls_dir):
                         report['CosimIntervalMax'] = result[7]
 
     return report
-

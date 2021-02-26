@@ -8,6 +8,7 @@ from hls4ml.model import HLSModel
 
 MAXMULT = 4096
 
+
 class KerasFileReader(object):
     def __init__(self, config):
         self.config = config
@@ -22,7 +23,7 @@ class KerasFileReader(object):
             if var_name in name:
                 return name
 
-        if 'model_weights' in list(self.h5file.keys()): # h5 file comes from model.save()
+        if 'model_weights' in list(self.h5file.keys()):  # h5 file comes from model.save()
             layer_path = 'model_weights/{}'.format(layer_name)
         else:
             layer_path = layer_name
@@ -47,6 +48,7 @@ class KerasFileReader(object):
         else:
             return None
 
+
 class KerasModelReader(object):
     def __init__(self, keras_model):
         self.model = keras_model
@@ -56,9 +58,9 @@ class KerasModelReader(object):
         for i, w in enumerate(layer.weights):
             if var_name in w.name:
                 try:
-                    return w.numpy() # TF 2.x
-                except:
-                    return layer.get_weights()[i] # TF 1.x
+                    return w.numpy()  # TF 2.x
+                except BaseException:
+                    return layer.get_weights()[i]  # TF 1.x
 
         return None
 
@@ -70,8 +72,9 @@ class KerasModelReader(object):
 
         return None
 
+
 def get_qkeras_quantization(layer, keras_layer):
-    if not layer['class_name'].startswith('Q'): # Not a QKeras layer, nothing to do
+    if not layer['class_name'].startswith('Q'):  # Not a QKeras layer, nothing to do
         return
     kernel_quantizer = keras_layer['config']['kernel_quantizer']['class_name']
     bias_quantizer = keras_layer['config']['bias_quantizer']['class_name']
@@ -88,14 +91,17 @@ def get_qkeras_quantization(layer, keras_layer):
 
 layer_handlers = {}
 
+
 def register_keras_layer_handler(layer_name, handler_func):
     if layer_name in layer_handlers:
         raise Exception('Layer {} already registered'.format(layer_name))
     else:
         layer_handlers[layer_name] = handler_func
 
+
 def get_supported_keras_layers():
     return list(layer_handlers.keys())
+
 
 def keras_handler(*args):
     def decorator(function):
@@ -103,10 +109,11 @@ def keras_handler(*args):
         return function
     return decorator
 
+
 def parse_default_keras_layer(keras_layer, input_names):
     layer = {}
 
-    #Extract name for finding weights and biases
+    # Extract name for finding weights and biases
     layer['name'] = keras_layer['config']['name']
     layer['class_name'] = keras_layer['class_name']
     if input_names is not None:
@@ -123,24 +130,26 @@ def parse_default_keras_layer(keras_layer, input_names):
 
     return layer
 
+
 def parse_data_format(input_shape, data_format='channels_last'):
     if input_shape[0] is None:
         # Ignore batch size
         input_shape = input_shape[1:]
-    
+
     if data_format.lower() == 'channels_last':
-        if len(input_shape) == 2: # 1D, (n_in, n_filt)
+        if len(input_shape) == 2:  # 1D, (n_in, n_filt)
             return (input_shape[0], input_shape[1])
-        elif len(input_shape) == 3: # 2D, (in_height, in_width, n_filt)
+        elif len(input_shape) == 3:  # 2D, (in_height, in_width, n_filt)
             return (input_shape[0], input_shape[1], input_shape[2])
-        
+
     elif data_format.lower() == 'channels_first':
-        if len(input_shape) == 2: # 1D, (n_filt, n_in)
+        if len(input_shape) == 2:  # 1D, (n_filt, n_in)
             return (input_shape[1], input_shape[0])
-        elif len(input_shape) == 3: # 2D, (n_filt, in_height, in_width)
+        elif len(input_shape) == 3:  # 2D, (n_filt, in_height, in_width)
             return (input_shape[1], input_shape[2], input_shape[0])
     else:
         raise Exception('Unknown data format: {}'.format(data_format))
+
 
 def compute_padding_1d(pad_type, in_size, stride, filt_size):
     if pad_type.lower() == 'same':
@@ -149,8 +158,8 @@ def compute_padding_1d(pad_type, in_size, stride, filt_size):
             pad_along_size = max(filt_size - stride, 0)
         else:
             pad_along_size = max(filt_size - (in_size % stride), 0)
-        pad_left  = pad_along_size // 2
-        pad_right  = pad_along_size - pad_left
+        pad_left = pad_along_size // 2
+        pad_right = pad_along_size - pad_left
     elif pad_type.lower() == 'valid':
         n_out = int(math.ceil(float(in_size - filt_size + 1) / float(stride)))
         pad_left = 0
@@ -160,9 +169,10 @@ def compute_padding_1d(pad_type, in_size, stride, filt_size):
 
     return (n_out, pad_left, pad_right)
 
+
 def compute_padding_2d(pad_type, in_height, in_width, stride_height, stride_width, filt_height, filt_width):
     if pad_type.lower() == 'same':
-        #Height
+        # Height
         out_height = int(math.ceil(float(in_height) / float(stride_height)))
         if (in_height % stride_height == 0):
             pad_along_height = max(filt_height - stride_height, 0)
@@ -170,7 +180,7 @@ def compute_padding_2d(pad_type, in_height, in_width, stride_height, stride_widt
             pad_along_height = max(filt_height - (in_height % stride_height), 0)
         pad_top = pad_along_height // 2
         pad_bottom = pad_along_height - pad_top
-        #Width
+        # Width
         out_width = int(math.ceil(float(in_width) / float(stride_width)))
         if (in_width % stride_width == 0):
             pad_along_width = max(filt_width - stride_width, 0)
@@ -181,7 +191,7 @@ def compute_padding_2d(pad_type, in_height, in_width, stride_height, stride_widt
     elif pad_type.lower() == 'valid':
         out_height = int(math.ceil(float(in_height - filt_height + 1) / float(stride_height)))
         out_width = int(math.ceil(float(in_width - filt_width + 1) / float(stride_width)))
-        
+
         pad_top = 0
         pad_bottom = 0
         pad_left = 0
@@ -191,13 +201,14 @@ def compute_padding_2d(pad_type, in_height, in_width, stride_height, stride_widt
 
     return (out_height, out_width, pad_top, pad_bottom, pad_left, pad_right)
 
+
 def keras_to_hls(config):
 
     ######################
-    ##  Do translation
+    # Do translation
     ######################
 
-    #This is a list of dictionaries to hold all the layer info we need to generate HLS
+    # This is a list of dictionaries to hold all the layer info we need to generate HLS
     layer_list = []
 
     if 'KerasModel' in config:
@@ -222,17 +233,17 @@ def keras_to_hls(config):
     else:
         raise ValueError('No model found in config file.')
 
-    #print(model_arch)
+    # print(model_arch)
 
-    #Define layers to skip for conversion to HLS
+    # Define layers to skip for conversion to HLS
     skip_layers = ['Dropout', 'Flatten']
-    #All supported layers
+    # All supported layers
     supported_layers = get_supported_keras_layers() + skip_layers
 
-    #Map inputs of skipped and split (activation) layers
+    # Map inputs of skipped and split (activation) layers
     inputs_map = {}
 
-    #Loop through layers
+    # Loop through layers
     layer_counter = 0
 
     input_layers = None
@@ -242,7 +253,7 @@ def keras_to_hls(config):
     if model_arch['class_name'] == 'Sequential':
         print('Interpreting Sequential')
         layer_config = model_arch['config']
-        if 'layers' in layer_config: # Newer Keras versions have 'layers' in 'config' key
+        if 'layers' in layer_config:  # Newer Keras versions have 'layers' in 'config' key
             layer_config = layer_config['layers']
         # Sequential doesn't have InputLayer in TF < 2.3 (Keras 2.4.0)
         if layer_config[0]['class_name'] != 'InputLayer':
@@ -252,11 +263,11 @@ def keras_to_hls(config):
             input_layer['input_shape'] = layer_config[0]['config']['batch_input_shape'][1:]
             layer_list.append(input_layer)
             print('Input shape:', input_layer['input_shape'])
-    elif model_arch['class_name'] in ['Model', 'Functional']: # TF >= 2.3 calls it 'Funcational' API
+    elif model_arch['class_name'] in ['Model', 'Functional']:  # TF >= 2.3 calls it 'Funcational' API
         print('Interpreting Model')
         layer_config = model_arch['config']['layers']
-        input_layers = [ inp[0] for inp in model_arch['config']['input_layers'] ]
-        output_layers = [ out[0] for out in model_arch['config']['output_layers'] ]
+        input_layers = [inp[0] for inp in model_arch['config']['input_layers']]
+        output_layers = [out[0] for out in model_arch['config']['output_layers']]
 
     # Get input shape and check for unsupported layer type
     for keras_layer in layer_config:
@@ -277,7 +288,7 @@ def keras_to_hls(config):
             if 'inbound_nodes' in keras_layer:
                 input_shapes = [output_shapes[inbound_node[0][0]] for inbound_node in keras_layer['inbound_nodes']]
             else:
-                # Sequential model, so output_shape from the previous layer is still valid 
+                # Sequential model, so output_shape from the previous layer is still valid
                 input_shapes = [output_shape]
 
         keras_class = keras_layer['class_name']
@@ -285,9 +296,9 @@ def keras_to_hls(config):
         if keras_class in skip_layers:
             if 'inbound_nodes' in keras_layer:
                 name = keras_layer['config']['name']
-                #Currently supported skipped layers have only one input
+                # Currently supported skipped layers have only one input
                 parent_input = keras_layer['inbound_nodes'][0][0][0]
-                #Skipped layers can follow each other (e.g., Dropout -> Flatten)
+                # Skipped layers can follow each other (e.g., Dropout -> Flatten)
                 inputs_map[name] = inputs_map.get(parent_input, parent_input)
 
             if keras_class == 'Flatten':
@@ -300,17 +311,17 @@ def keras_to_hls(config):
         if keras_class in supported_layers:
             layer_counter = layer_counter + 1
 
-        #Extract inbound nodes
+        # Extract inbound nodes
         if 'inbound_nodes' in keras_layer and len(keras_layer['inbound_nodes']) > 0:
-            input_names = [ inputs_map.get(inp[0], inp[0]) for inp in keras_layer['inbound_nodes'][0] ]
+            input_names = [inputs_map.get(inp[0], inp[0]) for inp in keras_layer['inbound_nodes'][0]]
         else:
             input_names = None
 
         layer, output_shape = layer_handlers[keras_class](keras_layer, input_names, input_shapes, reader, config)
 
         print('Layer name: {}, layer type: {}, current shape: {}'.format(layer['name'], layer['class_name'], input_shapes))
-        layer_list.append( layer )
-        if 'activation' in layer and layer['class_name'] not in ['Activation', 'LeakyReLU', 'ThresholdedReLU', 'ELU', 'PReLU', 'Softmax']:# + qkeras_layers:
+        layer_list.append(layer)
+        if 'activation' in layer and layer['class_name'] not in ['Activation', 'LeakyReLU', 'ThresholdedReLU', 'ELU', 'PReLU', 'Softmax']:  # + qkeras_layers:
             act_layer = {}
             act_layer['name'] = layer['name'] + '_' + layer['activation']
             act_layer['activation'] = layer['activation']
@@ -327,11 +338,11 @@ def keras_to_hls(config):
             layer_list.append(act_layer)
 
         assert(output_shape is not None)
-        
+
         output_shapes[layer['name']] = output_shape
 
     #################
-    ## Generate HLS
+    # Generate HLS
     #################
 
     print('Creating HLS model')

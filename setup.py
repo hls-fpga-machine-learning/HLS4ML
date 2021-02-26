@@ -4,10 +4,12 @@ from setuptools import find_packages
 import codecs
 import os.path
 
+
 def read(rel_path):
     this_directory = os.path.abspath(os.path.dirname(__file__))
     with codecs.open(os.path.join(this_directory, rel_path), 'r') as fp:
         return fp.read()
+
 
 def get_version(rel_path):
     for line in read(rel_path).splitlines():
@@ -16,6 +18,7 @@ def get_version(rel_path):
             return line.split(delim)[1]
     else:
         raise RuntimeError("Unable to find version string.")
+
 
 setup(name='hls4ml',
       version=get_version("hls4ml/__init__.py"),

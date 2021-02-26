@@ -6,6 +6,7 @@ from hls4ml.model.hls_model import Layer, IntegerPrecisionType, XnorPrecisionTyp
 from hls4ml.model.hls_layers import BatchNormalization
 from hls4ml.templates import templates
 
+
 class BatchNormalizationQuantizedTanh(Layer):
     ''' Merged Batch Normalization and quantized (binary or ternary) Tanh layer.
         The mean, variance, beta, gamma parameters are folded into the threshold(s) at which the
@@ -63,6 +64,7 @@ class BatchNormalizationQuantizedTanh(Layer):
 
         return self._config_template.format(**params)
 
+
 batchnorm_quantized_tanh_config_template = """struct config{index} : nnet::batchnorm_quantized_tanh_config {{
     static const unsigned n_in = {n_in};
     static const unsigned n_filt = {n_filt};
@@ -78,11 +80,12 @@ register_layer('BatchNormalizationQuantizedTanh', BatchNormalizationQuantizedTan
 # Register the templates for config and function
 templates.get_backend('Vivado').register_templates('BatchNormalizationQuantizedTanh', batchnorm_quantized_tanh_function_template, batchnorm_quantized_tanh_config_template)
 
+
 class MergeBatchNormAndQuantizedTanh(OptimizerPass):
     def match(self, node):
         is_match = (node.__class__.__name__ == 'Activation'
-            and node.get_attr('activation') in ['binary_tanh', 'ternary_tanh']
-            and isinstance(node.get_input_node(), BatchNormalization))
+                    and node.get_attr('activation') in ['binary_tanh', 'ternary_tanh']
+                    and isinstance(node.get_input_node(), BatchNormalization))
         return is_match
 
     def transform(self, model, node):
@@ -96,19 +99,19 @@ class MergeBatchNormAndQuantizedTanh(OptimizerPass):
         if node.get_attr('activation') == 'ternary_tanh':
             quantize = 3
         attrs = {
-            'name' : bn_layer.get_attr('name'),
-            'original_name' : bn_layer.get_attr('name'),
-            'class_name' : 'BatchNormalizationQuantizedTanh',
-            'n_in' : bn_layer.get_attr('n_in'),
-            'n_out' : bn_layer.get_attr('n_in'),
-            'n_filt' : bn_layer.get_attr('n_filt'),
-            'epsilon' : bn_layer.get_attr('epsilon'),
-            'quantize' : quantize,
-            'beta_quantizer' : bn_layer.get_attr('beta_quantizer'),
-            'gamma_quantizer' : bn_layer.get_attr('gamma_quantizer'),
-            'mean_quantizer' : bn_layer.get_attr('mean_quantizer'),
-            'variance_quantizer' : bn_layer.get_attr('variance_quantizer'),
-            'Trace' : bn_layer.get_attr('Trace')
+            'name': bn_layer.get_attr('name'),
+            'original_name': bn_layer.get_attr('name'),
+            'class_name': 'BatchNormalizationQuantizedTanh',
+            'n_in': bn_layer.get_attr('n_in'),
+            'n_out': bn_layer.get_attr('n_in'),
+            'n_filt': bn_layer.get_attr('n_filt'),
+            'epsilon': bn_layer.get_attr('epsilon'),
+            'quantize': quantize,
+            'beta_quantizer': bn_layer.get_attr('beta_quantizer'),
+            'gamma_quantizer': bn_layer.get_attr('gamma_quantizer'),
+            'mean_quantizer': bn_layer.get_attr('mean_quantizer'),
+            'variance_quantizer': bn_layer.get_attr('variance_quantizer'),
+            'Trace': bn_layer.get_attr('Trace')
         }
         bnbt_layer = model.make_node('BatchNormalizationQuantizedTanh', 'bnbt_' + bn_layer.name, attrs, bn_layer.inputs)
         # Replace the old BatchNormalization layer with this one
@@ -116,10 +119,11 @@ class MergeBatchNormAndQuantizedTanh(OptimizerPass):
 
         return True
 
+
 class QuantizeDenseOutput(OptimizerPass):
     def match(self, node):
         is_match = (node.__class__.__name__ == 'Dense' and node.get_attr('weight_quantizer') is not None
-            and node.get_input_node().__class__.__name__ == 'BatchNormalizationQuantizedTanh')
+                    and node.get_input_node().__class__.__name__ == 'BatchNormalizationQuantizedTanh')
         return is_match
 
     def transform(self, model, node):

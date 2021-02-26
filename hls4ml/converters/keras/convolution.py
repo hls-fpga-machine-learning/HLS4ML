@@ -11,7 +11,7 @@ def parse_conv1d_layer(keras_layer, input_names, input_shapes, data_reader, conf
     assert('Conv1D' in keras_layer['class_name'])
 
     layer = parse_default_keras_layer(keras_layer, input_names)
-    
+
     (
         layer['in_width'],
         layer['n_chan']
@@ -46,7 +46,7 @@ def parse_conv2d_layer(keras_layer, input_names, input_shapes, data_reader, conf
     assert('Conv2D' in keras_layer['class_name'])
 
     layer = parse_default_keras_layer(keras_layer, input_names)
-    
+
     (
         layer['in_height'],
         layer['in_width'],
@@ -55,14 +55,14 @@ def parse_conv2d_layer(keras_layer, input_names, input_shapes, data_reader, conf
 
     if 'filters' in keras_layer['config']:
         layer['n_filt'] = keras_layer['config']['filters']
-    else:    
+    else:
         layer['n_filt'] = layer['n_chan']
     layer['filt_height'] = keras_layer['config']['kernel_size'][0]
     layer['filt_width'] = keras_layer['config']['kernel_size'][1]
     layer['stride_height'] = keras_layer['config']['strides'][0]
     layer['stride_width'] = keras_layer['config']['strides'][1]
     layer['padding'] = keras_layer['config']['padding']
-    
+
     (
         layer['out_height'],
         layer['out_width'],

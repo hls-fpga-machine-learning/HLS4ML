@@ -70,7 +70,7 @@ def model_to_dot(model,
             return
         else:
             raise ImportError('Failed to import pydot. You must install pydot'
-                            ' and graphviz for `pydotprint` to work.')
+                              ' and graphviz for `pydotprint` to work.')
 
     if subgraph:
         dot = pydot.Cluster(style='dashed', graph_name=model.name)
@@ -106,8 +106,8 @@ def model_to_dot(model,
         if show_shapes:
             def format_shape(shape):
                 return str(tuple(shape)).replace(str(None), '?')
-            
-            input_labels = '?' 
+
+            input_labels = '?'
             try:
                 output_labels = format_shape(layer.get_output_variable().shape)
             except AttributeError:
@@ -146,13 +146,13 @@ def model_to_dot(model,
                 tensors.update(layer.variables)
             for tensor_name, var in tensors.items():
                 if show_shapes:
-                    #tensor_label = '{} {}: {}'.format(tensor_name,
+                    # tensor_label = '{} {}: {}'.format(tensor_name,
                     tensor_label = '<tr><td align="left">{} {}:</td><td align="left">{}</td></tr>'.format(
                         tensor_name,
                         format_shape(var.shape),
                         format_precision(var.type.precision))
                 else:
-                    #tensor_label = '{}: {}'.format(tensor_name,
+                    # tensor_label = '{}: {}'.format(tensor_name,
                     tensor_label = '<tr><td align="left">{}:</td><td align="left">{}</td></tr>'.format(
                         tensor_name,
                         format_precision(var.type.precision))
@@ -186,7 +186,7 @@ def plot_model(model,
                rankdir='TB',
                dpi=96):
     """Converts a HLS model to dot format and save to a file.
-  
+
     Arguments:
         model: A HLS model instance
         to_file: File name of the plot image.
@@ -198,7 +198,7 @@ def plot_model(model,
             'TB' creates a vertical plot;
             'LR' creates a horizontal plot.
         dpi: Dots per inch.
-  
+
     Returns:
         A Jupyter notebook Image object if Jupyter is installed.
         This enables in-line display of the model plots in notebooks.
@@ -211,7 +211,7 @@ def plot_model(model,
                        dpi=dpi)
     if dot is None:
         return
-    
+
     if to_file is not None:
         _, extension = os.path.splitext(to_file)
         if not extension:

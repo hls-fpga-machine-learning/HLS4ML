@@ -5,6 +5,7 @@ from hls4ml.model.optimizer import OptimizerPass
 from hls4ml.model.hls_model import Layer, register_layer
 from hls4ml.templates import templates
 
+
 class Repack(Layer):
     ''' Inserted between layers with different packing factors.'''
 
@@ -24,6 +25,7 @@ class Repack(Layer):
     def config_cpp(self):
         return None
 
+
 repack_function_template = 'nnet::repack_stream<{input_t}, {output_t}, {size}>({input}, {output});'
 repack_include_list = ['nnet_utils/nnet_stream.h']
 
@@ -36,12 +38,13 @@ templates.get_backend('Vivado').register_templates('Repack', repack_function_tem
 
 class ReshapeStream(OptimizerPass):
     ''' Repacks stream for Reshape layer '''
+
     def match(self, node):
         return node.__class__.__name__ == 'Reshape'
 
     def transform(self, model, node):
         if model.config.backend.name != 'Vivado' or \
-            model.config.get_config_value('IOType') != 'io_stream':
+                model.config.get_config_value('IOType') != 'io_stream':
             return False
 
         attrs = {

@@ -17,25 +17,26 @@ def parse_zeropadding1d_layer(keras_layer, input_names, input_shapes, data_reade
     elif isinstance(padding, collections.abc.Sequence):
         layer['pad_left'] = padding[0]
         layer['pad_right'] = padding[1]
-        
+
     if layer['data_format'] == 'channels_first':
         output_shape = [
-            input_shapes[0][0], # Batch
-            input_shapes[0][1], # Channels
+            input_shapes[0][0],  # Batch
+            input_shapes[0][1],  # Channels
             layer['pad_left'] + input_shapes[0][2] + layer['pad_right']  # Width
         ]
         layer['out_width'] = output_shape[2]
         layer['n_chan'] = output_shape[1]
     else:
         output_shape = [
-            input_shapes[0][0], # Batch
-            layer['pad_left'] + input_shapes[0][1] + layer['pad_right'], # Width
-            input_shapes[0][2] # Channels
+            input_shapes[0][0],  # Batch
+            layer['pad_left'] + input_shapes[0][1] + layer['pad_right'],  # Width
+            input_shapes[0][2]  # Channels
         ]
         layer['out_width'] = output_shape[1]
         layer['n_chan'] = output_shape[2]
 
     return layer, output_shape
+
 
 @keras_handler('ZeroPadding2D')
 def parse_zeropadding2d_layer(keras_layer, input_names, input_shapes, data_reader, config):
@@ -66,9 +67,9 @@ def parse_zeropadding2d_layer(keras_layer, input_names, input_shapes, data_reade
 
     if layer['data_format'] == 'channels_first':
         output_shape = [
-            input_shapes[0][0], # Batch
-            input_shapes[0][1], # Channels
-            layer['pad_top'] + input_shapes[0][2] + layer['pad_bottom'], # Height
+            input_shapes[0][0],  # Batch
+            input_shapes[0][1],  # Channels
+            layer['pad_top'] + input_shapes[0][2] + layer['pad_bottom'],  # Height
             layer['pad_left'] + input_shapes[0][3] + layer['pad_right']  # Width
         ]
         layer['out_height'] = output_shape[2]
@@ -76,10 +77,10 @@ def parse_zeropadding2d_layer(keras_layer, input_names, input_shapes, data_reade
         layer['n_chan'] = output_shape[1]
     else:
         output_shape = [
-            input_shapes[0][0], # Batch
-            layer['pad_top'] + input_shapes[0][1] + layer['pad_bottom'], # Height
-            layer['pad_left'] + input_shapes[0][2] + layer['pad_right'], # Width
-            input_shapes[0][3] # Channels
+            input_shapes[0][0],  # Batch
+            layer['pad_top'] + input_shapes[0][1] + layer['pad_bottom'],  # Height
+            layer['pad_left'] + input_shapes[0][2] + layer['pad_right'],  # Width
+            input_shapes[0][3]  # Channels
         ]
         layer['out_height'] = output_shape[1]
         layer['out_width'] = output_shape[2]

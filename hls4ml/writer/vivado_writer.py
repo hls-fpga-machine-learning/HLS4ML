@@ -11,6 +11,7 @@ from collections import OrderedDict
 from hls4ml.writer.writers import Writer
 from hls4ml.model.hls_layers import XnorPrecisionType
 
+
 class VivadoWriter(Writer):
 
     def type_definition_cpp(self, model, atype):
@@ -19,9 +20,9 @@ class VivadoWriter(Writer):
             return 'typedef {precision} {name};\n'.format(name=atype.name, precision=atype.precision)
         elif type_class == 'CompressedType':
             cpp_fmt = ('typedef struct {name} {{ '
-               '{index} row_index;'
-               '{index} col_index;'
-               '{precision} weight; }} {name};\n')
+                       '{index} row_index;'
+                       '{index} col_index;'
+                       '{precision} weight; }} {name};\n')
             return cpp_fmt.format(name=atype.name, index=atype.index_precision, precision=atype.precision)
         elif type_class == 'PackedType':
             n_elem_expr = '/' if atype.unpack else '*'
@@ -39,9 +40,9 @@ class VivadoWriter(Writer):
         if var_class == 'ArrayVariable':
             return '{type} {name}{suffix}[{shape}]'.format(type=var.type.name, name=var.cppname, suffix=name_suffix, shape=var.size_cpp())
         elif var_class == 'StreamVariable':
-            if as_reference: # Function parameter
+            if as_reference:  # Function parameter
                 return 'hls::stream<{type}> &{name}{suffix}'.format(type=var.type.name, name=var.cppname, suffix=name_suffix)
-            else: # Declaration
+            else:  # Declaration
                 return 'hls::stream<{type}> {name}{suffix}("{name}")'.format(type=var.type.name, name=var.cppname, suffix=name_suffix)
         elif var_class == 'WeightVariable':
             return '{type} {name}{suffix}[{size}]'.format(type=var.type.name, name=var.cppname, suffix=name_suffix, size=var.data_length)
@@ -52,14 +53,14 @@ class VivadoWriter(Writer):
 
     def print_array_to_cpp(self, var, odir, write_txt_file=True):
         #######################################
-        ## Print weight array to C++
+        # Print weight array to C++
         #######################################
 
-        h_file = open("{}/firmware/weights/{}.h".format(odir,var.name),"w")
+        h_file = open("{}/firmware/weights/{}.h".format(odir, var.name), "w")
         if write_txt_file:
-            txt_file = open("{}/firmware/weights/{}.txt".format(odir,var.name),"w")
+            txt_file = open("{}/firmware/weights/{}.txt".format(odir, var.name), "w")
 
-        #meta data
+        # meta data
         h_file.write("//Numpy array shape {}\n".format(var.shape))
         h_file.write("//Min {:.12f}\n".format(np.min(var.min)))
         h_file.write("//Max {:.12f}\n".format(np.max(var.max)))
@@ -77,8 +78,8 @@ class VivadoWriter(Writer):
 
         h_file.write(var.definition_cpp() + " = {")
 
-        #fill c++ array.
-        #not including internal brackets for multidimensional case
+        # fill c++ array.
+        # not including internal brackets for multidimensional case
         sep = ''
         for x in var:
             h_file.write(sep + x)
@@ -104,9 +105,9 @@ class VivadoWriter(Writer):
         If `pragma` is a tuple: (mode, type, factor) where mode is 'partition' or 'reshape', type is
         'complete', 'cyclic', or 'block', and factor is an integer only used when the type is not 'complete'.
         """
-        
+
         config = variable.pragma
-        if type(config) is tuple:
+        if isinstance(config, tuple):
             mode = config[0]
             if mode in ['partition', 'reshape']:
                 typ = config[1]
@@ -137,12 +138,12 @@ class VivadoWriter(Writer):
 
     def write_project_cpp(self, model):
         ###################
-        ## myproject.cpp
+        # myproject.cpp
         ###################
 
         filedir = os.path.dirname(os.path.abspath(__file__))
-        f = open(os.path.join(filedir,'../templates/vivado/firmware/myproject.cpp'),'r')
-        fout = open('{}/firmware/{}.cpp'.format(model.config.get_output_dir(), model.config.get_project_name()),'w')
+        f = open(os.path.join(filedir, '../templates/vivado/firmware/myproject.cpp'), 'r')
+        fout = open('{}/firmware/{}.cpp'.format(model.config.get_output_dir(), model.config.get_project_name()), 'w')
 
         model_inputs = model.get_input_variables()
         model_outputs = model.get_output_variables()
@@ -150,7 +151,7 @@ class VivadoWriter(Writer):
         indent = '    '
 
         for line in f.readlines():
-            #Add headers to weights and biases
+            # Add headers to weights and biases
             if 'myproject' in line:
                 newline = line.replace('myproject', model.config.get_project_name())
             elif '//hls-fpga-machine-learning insert header' in line:
@@ -176,7 +177,7 @@ class VivadoWriter(Writer):
                         else:
                             newline += indent + '    nnet::load_weights_from_txt<{}, {}>({}, "{}.txt");\n'.format(w.type.name, w.data_length, w.name, w.name)
 
-            #Add input/output type
+            # Add input/output type
             elif '//hls-fpga-machine-learning insert IO' in line:
                 newline = line
                 all_inputs = [i.cppname for i in model_inputs]
@@ -184,8 +185,10 @@ class VivadoWriter(Writer):
                 io_type = model.config.get_config_value("IOType")
 
                 if io_type == 'io_parallel':
-                    for i in model_inputs: newline += indent + self._make_array_pragma(i) + '\n'
-                    for o in model_outputs: newline += indent + self._make_array_pragma(o) + '\n'
+                    for i in model_inputs:
+                        newline += indent + self._make_array_pragma(i) + '\n'
+                    for o in model_outputs:
+                        newline += indent + self._make_array_pragma(o) + '\n'
                     # TODO discussed adding a handle for setting the interface mode for individual input and output arrays (16.03.2020)
                     # Probably the handle doesn't need to be exposed to the user but should be just set in hls_model.py
                     newline += indent + '#pragma HLS INTERFACE ap_vld port={},{} \n'.format(','.join(all_inputs), ','.join(all_outputs))
@@ -233,7 +236,7 @@ class VivadoWriter(Writer):
                             newline += '#endif\n'
                         newline += '\n'
 
-            #Just copy line
+            # Just copy line
             else:
                 newline = line
 
@@ -244,12 +247,12 @@ class VivadoWriter(Writer):
 
     def write_project_header(self, model):
         #######################
-        ## myproject.h
+        # myproject.h
         #######################
 
         filedir = os.path.dirname(os.path.abspath(__file__))
-        f = open(os.path.join(filedir,'../templates/vivado/firmware/myproject.h'),'r')
-        fout = open('{}/firmware/{}.h'.format(model.config.get_output_dir(), model.config.get_project_name()),'w')
+        f = open(os.path.join(filedir, '../templates/vivado/firmware/myproject.h'), 'r')
+        fout = open('{}/firmware/{}.h'.format(model.config.get_output_dir(), model.config.get_project_name()), 'w')
 
         model_inputs = model.get_input_variables()
         model_outputs = model.get_output_variables()
@@ -259,7 +262,7 @@ class VivadoWriter(Writer):
         for line in f.readlines():
 
             if 'MYPROJECT' in line:
-                newline = line.replace('MYPROJECT',format(model.config.get_project_name().upper()))
+                newline = line.replace('MYPROJECT', format(model.config.get_project_name().upper()))
             elif 'void myproject(' in line:
                 newline = 'void {}(\n'.format(model.config.get_project_name())
             elif '//hls-fpga-machine-learning insert header' in line:
@@ -282,12 +285,12 @@ class VivadoWriter(Writer):
 
     def write_defines(self, model):
         filedir = os.path.dirname(os.path.abspath(__file__))
-        f = open(os.path.join(filedir,'../templates/vivado/firmware/defines.h'),'r')
-        fout = open('{}/firmware/defines.h'.format(model.config.get_output_dir()),'w')
+        f = open(os.path.join(filedir, '../templates/vivado/firmware/defines.h'), 'r')
+        fout = open('{}/firmware/defines.h'.format(model.config.get_output_dir()), 'w')
 
         for line in f.readlines():
 
-            #Insert numbers
+            # Insert numbers
             if '//hls-fpga-machine-learning insert numbers' in line:
                 newline = line
                 numbers = OrderedDict.fromkeys([layer.get_numbers_cpp() for layer in model.get_layers()])
@@ -310,8 +313,8 @@ class VivadoWriter(Writer):
 
     def write_parameters(self, model):
         filedir = os.path.dirname(os.path.abspath(__file__))
-        f = open(os.path.join(filedir,'../templates/vivado/firmware/parameters.h'),'r')
-        fout = open('{}/firmware/parameters.h'.format(model.config.get_output_dir()),'w')
+        f = open(os.path.join(filedir, '../templates/vivado/firmware/parameters.h'), 'r')
+        fout = open('{}/firmware/parameters.h'.format(model.config.get_output_dir()), 'w')
 
         for line in f.readlines():
 
@@ -343,21 +346,21 @@ class VivadoWriter(Writer):
         for layer in model.get_layers():
             for weights in layer.get_weights():
                 self.print_array_to_cpp(weights, model.config.get_output_dir())
-    
-    def __make_dat_file(self, original_path, project_path): 
+
+    def __make_dat_file(self, original_path, project_path):
         """
         Convert other input/output data types into a dat file, which is
         a text file with the falttened matrix printed out. Note that ' ' is
-        assumed to be the delimiter. 
+        assumed to be the delimiter.
         """
 
-        #Take in data from current supported data files
+        # Take in data from current supported data files
         if original_path[-3:] == "npy":
             data = np.load(original_path)
         else:
             raise Exception("Unsupported input/output data files.")
 
-        #Faltten data, just keep first dimension
+        # Faltten data, just keep first dimension
         data = data.reshape(data.shape[0], -1)
 
         def print_data(f):
@@ -366,42 +369,42 @@ class VivadoWriter(Writer):
                     f.write(str(data[i][j]) + " ")
                 f.write("\n")
 
-        #Print out in dat file
-        with open(project_path, "w" ) as f:
+        # Print out in dat file
+        with open(project_path, "w") as f:
             print_data(f)
 
     def write_test_bench(self, model):
         ###################
-        ## test bench
+        # test bench
         ###################
 
         filedir = os.path.dirname(os.path.abspath(__file__))
 
         if not os.path.exists('{}/tb_data/'.format(model.config.get_output_dir())):
             os.mkdir('{}/tb_data/'.format(model.config.get_output_dir()))
-        
+
         input_data = model.config.get_config_value('InputData')
         output_predictions = model.config.get_config_value('OutputPredictions')
-        
+
         if input_data:
             if input_data[-3:] == "dat":
                 copyfile(input_data, '{}/tb_data/tb_input_features.dat'.format(model.config.get_output_dir()))
             else:
-                self.__make_dat_file(input_data,'{}/tb_data/tb_input_features.dat'.format(model.config.get_output_dir()))
-        
+                self.__make_dat_file(input_data, '{}/tb_data/tb_input_features.dat'.format(model.config.get_output_dir()))
+
         if output_predictions:
             if output_predictions[-3:] == "dat":
                 copyfile(output_predictions, '{}/tb_data/tb_output_predictions.dat'.format(model.config.get_output_dir()))
             else:
-                self.__make_dat_file(output_predictions,'{}/tb_data/tb_output_predictions.dat'.format(model.config.get_output_dir()))
+                self.__make_dat_file(output_predictions, '{}/tb_data/tb_output_predictions.dat'.format(model.config.get_output_dir()))
 
-        f = open(os.path.join(filedir,'../templates/vivado/myproject_test.cpp'),'r')
-        fout = open('{}/{}_test.cpp'.format(model.config.get_output_dir(), model.config.get_project_name()),'w')
+        f = open(os.path.join(filedir, '../templates/vivado/myproject_test.cpp'), 'r')
+        fout = open('{}/{}_test.cpp'.format(model.config.get_output_dir(), model.config.get_project_name()), 'w')
 
         for line in f.readlines():
             indent = ' ' * (len(line) - len(line.lstrip(' ')))
 
-            #Insert numbers
+            # Insert numbers
             if 'myproject' in line:
                 newline = line.replace('myproject', model.config.get_project_name())
             elif '//hls-fpga-machine-learning insert data' in line:
@@ -442,7 +445,7 @@ class VivadoWriter(Writer):
             elif '//hls-fpga-machine-learning insert tb-output' in line:
                 newline = line
                 for out in model.get_output_variables():
-                    newline += indent + 'nnet::print_result<{}, {}>({}, fout);\n'.format(out.type.name, out.size_cpp(), out.cppname) #TODO enable this
+                    newline += indent + 'nnet::print_result<{}, {}>({}, fout);\n'.format(out.type.name, out.size_cpp(), out.cppname)  # TODO enable this
             elif '//hls-fpga-machine-learning insert output' in line or '//hls-fpga-machine-learning insert quantized' in line:
                 newline = line
                 for out in model.get_output_variables():
@@ -459,8 +462,8 @@ class VivadoWriter(Writer):
         ###################
 
         filedir = os.path.dirname(os.path.abspath(__file__))
-        f = open(os.path.join(filedir,'../templates/vivado/myproject_bridge.cpp'),'r')
-        fout = open('{}/{}_bridge.cpp'.format(model.config.get_output_dir(), model.config.get_project_name()),'w')
+        f = open(os.path.join(filedir, '../templates/vivado/myproject_bridge.cpp'), 'r')
+        fout = open('{}/{}_bridge.cpp'.format(model.config.get_output_dir(), model.config.get_project_name()), 'w')
 
         model_inputs = model.get_input_variables()
         model_outputs = model.get_output_variables()
@@ -492,10 +495,10 @@ class VivadoWriter(Writer):
                     newline += indent + '{var};\n'.format(var=self.variable_definition_cpp(model, i, name_suffix='_ap'))
                     newline += indent + 'nnet::convert_data<{}, {}, {}>({}, {}_ap);\n'.format(dtype, i.type.name, i.size_cpp(), i.cppname, i.cppname)
                 newline += '\n'
-                
+
                 for o in model_outputs:
                     newline += indent + '{var};\n'.format(var=self.variable_definition_cpp(model, o, name_suffix='_ap'))
-                
+
                 newline += '\n'
 
                 input_size_vars = ','.join(['const_size_in_{}'.format(i) for i in range(1, len(model.get_input_variables()) + 1)])
@@ -513,10 +516,10 @@ class VivadoWriter(Writer):
                 newline = ''
                 for layer in model.get_layers():
                     if layer.function_cpp() and model.config.trace_output and layer.get_attr('Trace', False):
-                            vars = layer.get_variables()
-                            for var in vars:
-                                newline += indent + 'nnet::trace_outputs->insert(std::pair<std::string, void *>("{}", (void *) malloc({} * element_size)));\n'.format(layer.name, var.size_cpp())
-                    
+                        vars = layer.get_variables()
+                        for var in vars:
+                            newline += indent + 'nnet::trace_outputs->insert(std::pair<std::string, void *>("{}", (void *) malloc({} * element_size)));\n'.format(layer.name, var.size_cpp())
+
             else:
                 newline = line
             fout.write(newline)
@@ -531,12 +534,12 @@ class VivadoWriter(Writer):
 
         filedir = os.path.dirname(os.path.abspath(__file__))
 
-        f = open(os.path.join(filedir,'../templates/vivado/build_prj.tcl'),'r')
-        fout = open('{}/build_prj.tcl'.format(model.config.get_output_dir()),'w')
+        f = open(os.path.join(filedir, '../templates/vivado/build_prj.tcl'), 'r')
+        fout = open('{}/build_prj.tcl'.format(model.config.get_output_dir()), 'w')
 
         for line in f.readlines():
 
-            line = line.replace('myproject',model.config.get_project_name())
+            line = line.replace('myproject', model.config.get_project_name())
 
             if 'set_part {xcku115-flvb2104-2-i}' in line:
                 line = 'set_part {{{}}}\n'.format(model.config.get_config_value('XilinxPart'))
@@ -547,13 +550,12 @@ class VivadoWriter(Writer):
         f.close()
         fout.close()
 
-
         ###################
         # vivado_synth.tcl
         ###################
 
-        f = open(os.path.join(filedir,'../templates/vivado/vivado_synth.tcl'),'r')
-        fout = open('{}/vivado_synth.tcl'.format(model.config.get_output_dir()),'w')
+        f = open(os.path.join(filedir, '../templates/vivado/vivado_synth.tcl'), 'r')
+        fout = open('{}/vivado_synth.tcl'.format(model.config.get_output_dir()), 'w')
         for line in f.readlines():
             line = line.replace('myproject', model.config.get_project_name())
             if '-part' in line:
@@ -567,8 +569,8 @@ class VivadoWriter(Writer):
         # build_lib.sh
         ###################
 
-        f = open(os.path.join(filedir,'../templates/vivado/build_lib.sh'),'r')
-        fout = open('{}/build_lib.sh'.format(model.config.get_output_dir()),'w')
+        f = open(os.path.join(filedir, '../templates/vivado/build_lib.sh'), 'r')
+        fout = open('{}/build_lib.sh'.format(model.config.get_output_dir()), 'w')
 
         for line in f.readlines():
             line = line.replace('myproject', model.config.get_project_name())
@@ -580,12 +582,12 @@ class VivadoWriter(Writer):
 
     def write_nnet_utils(self, model):
         ###################
-        ## nnet_utils
+        # nnet_utils
         ###################
 
         filedir = os.path.dirname(os.path.abspath(__file__))
 
-        srcpath = os.path.join(filedir,'../templates/vivado/nnet_utils/')
+        srcpath = os.path.join(filedir, '../templates/vivado/nnet_utils/')
         dstpath = '{}/firmware/nnet_utils/'.format(model.config.get_output_dir())
 
         if not os.path.exists(dstpath):
@@ -597,12 +599,12 @@ class VivadoWriter(Writer):
             copyfile(srcpath + h, dstpath + h)
 
         ###################
-        ## ap_types
+        # ap_types
         ###################
 
         filedir = os.path.dirname(os.path.abspath(__file__))
 
-        srcpath = os.path.join(filedir,'../templates/vivado/ap_types/')
+        srcpath = os.path.join(filedir, '../templates/vivado/ap_types/')
         dstpath = '{}/firmware/ap_types/'.format(model.config.get_output_dir())
 
         if os.path.exists(dstpath):
