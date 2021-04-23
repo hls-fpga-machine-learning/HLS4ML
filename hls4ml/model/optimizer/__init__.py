@@ -10,6 +10,7 @@ from hls4ml.model.optimizer.passes.fuse_biasadd import FuseBiasAdd
 from hls4ml.model.optimizer.passes.conv_same_pad import InsertZeroPaddingBeforeConv1D
 from hls4ml.model.optimizer.passes.conv_same_pad import InsertZeroPaddingBeforeConv2D
 from hls4ml.model.optimizer.passes.pointwise import OptimizePointwiseConv
+from hls4ml.model.optimizer.passes.conv_single_output import OptimizeSingleOutConv
 from hls4ml.model.optimizer.passes.clone import CloneOutput
 from hls4ml.model.optimizer.passes.repack_stream import ReshapeStream
 
@@ -29,6 +30,7 @@ register_pass('fuse_biasadd', FuseBiasAdd)
 register_pass('conv1d_same_pad', InsertZeroPaddingBeforeConv1D)
 register_pass('conv2d_same_pad', InsertZeroPaddingBeforeConv2D)
 register_pass('optimize_pointwise_conv', OptimizePointwiseConv)
+register_pass('optimize_single_out_conv', OptimizeSingleOutConv)
 register_pass('clone_output', CloneOutput)
 register_pass('reshape_stream', ReshapeStream)
 
