@@ -1107,6 +1107,152 @@ class DepthwiseConv2D(Conv2D):
         else:
             self.set_attr('strategy', 'latency')
 
+class LSTM(Layer):
+    def initialize(self):
+        shape = [self.attributes['n_sequence_out'],int(self.attributes['recurr_n_out']/4)]
+        dims = ['N_SEQUENCE_OUT_{}'.format(self.index), 'N_LAYER_{}'.format(self.index)]
+        compression = self.model.config.get_compression(self)
+        reuse_factor = self.model.config.get_reuse_factor(self)
+        self.reuse_factor_recr = reuse_factor
+        if self.model.config.is_resource_strategy(self):
+            if self.model.config.backend.name == 'Vivado':
+                self.model.config.backend.set_closest_reuse_factor(self)
+                self.model.config.backend.set_closest_reuse_factor_recr(self)
+            if compression:
+                self.set_attr('strategy', 'compressed')
+            else:
+                self.set_attr('strategy', 'resource')
+        else:
+            self.set_attr('strategy', 'latency')
+        self.add_output_variable(shape, dims)
+        self.add_weights()
+        self.add_bias()
+        recurrent_weight = self.model.get_weights_data(self.name, 'recurrent_kernel')
+        self.add_weights_variable(name='recurrent_weight', var_name='wr{index}', data=recurrent_weight)
+        recurrent_bias = np.zeros(self.get_output_variable().shape[-1]*4)
+        self.add_weights_variable(name='recurrent_bias', var_name='br{index}', data=recurrent_bias)
+
+
+    def function_cpp(self):
+        params = self._default_function_params()
+        params['w'] = self.get_weights('weight').name
+        params['b'] = self.get_weights('bias').name
+        params['wr'] = self.get_weights('recurrent_weight').name
+        params['br'] = self.get_weights('recurrent_bias').name
+        params['activation'] = self.get_attr('activation')
+        params['recurrent_activation'] = self.get_attr('recurrent_activation')
+
+        return [self._function_template.format(**params)]
+
+    def config_cpp(self):
+        params = self._default_config_params()
+        params['n_in'] = self.get_input_variable().dim_names[1]
+        params['n_sequence'] = self.get_input_variable().dim_names[0]
+        params['n_sequence_out'] = self.attributes['n_sequence_out']
+        params['n_state'] = self.get_output_variable().dim_names[1]
+        params['n_out'] = self.get_output_variable().dim_names[1]
+        params['nzeros'] = self.get_weights('weight').nzeros
+
+        params['config_mult_t1'] = 'config{}_mult1'.format(self.index)
+        params['config_mult_t2'] = 'config{}_mult2'.format(self.index)
+        params['lstm_act_t'] = '{}_config{}_recr'.format(self.get_attr('recurrent_activation'), self.index)
+        params['act_t'] = '{}_config{}'.format(self.get_attr('activation'), self.index)
+        params['strategy'] = self.get_attr('strategy')
+
+        lstm_config = self._config_template[0].format(**params)
+
+
+        lstm_params = self._default_config_params()
+        lstm_params['n_in'] = self.get_output_variable().dim_names[1] + ' * 3'
+        lstm_params['table_size'] = 1024
+        lstm_params['type'] = self.get_attr('recurrent_activation')
+        lstm_params['table_t'] = 'ap_fixed<18,8>'
+        lstm_act_config = self._config_template[2].format(**lstm_params)
+
+        act_params = self._default_config_params()
+        act_params['n_in'] = self.get_output_variable().dim_names[1]
+        act_params['table_size'] = 1024
+        act_params['type'] = self.get_attr('activation')
+        act_params['table_t'] = 'ap_fixed<18,8>'
+        act_config = self._config_template[3].format(**act_params)
+
+        mult_params1 = self._default_config_params()
+        mult_params2 = self._default_config_params()
+        mult_params1['n_in'] = self.get_input_variable().dim_names[1]
+        mult_params1['n_out'] = self.get_output_variable().dim_names[1] + ' * 4'
+        mult_params1['product_type'] = self.model.config.backend.product_type(self.get_input_variable().type.precision, self.get_weights('weight').type.precision)
+        mult_params1['reuse'] = params['reuse']
+        mult_params2['n_in'] = self.get_output_variable().dim_names[1]
+        mult_params2['n_out'] = self.get_output_variable().dim_names[1] + ' * 4'
+        mult_params2['product_type'] = self.model.config.backend.product_type(self.get_output_variable().type.precision, self.get_weights('recurrent_weight').type.precision)
+        mult_params2['reuse'] = self.reuse_factor_recr
+
+        mult_config1 = self._config_template[1].format(**mult_params1)
+        mult_config2 = self._config_template[4].format(**mult_params2)
+
+
+        return mult_config1 + '\n' + mult_config2 + '\n' + lstm_act_config + '\n' + act_config + '\n' + lstm_config
+
+class GRU(Layer):
+    def initialize(self):
+        shape = [self.attributes['n_sequence_out'],int(self.attributes['recurr_n_out']/3)]
+        dims = ['N_SEQUENCE_OUT_{}'.format(self.index), 'N_LAYER_{}'.format(self.index)]
+        self.add_output_variable(shape, dims)
+        self.add_weights()
+        self.add_bias()
+        recurrent_weight = self.model.get_weights_data(self.name, 'recurrent_kernel')
+        self.add_weights_variable(name='recurrent_weight', var_name='wr{index}', data=recurrent_weight)
+        recurrent_bias = np.zeros(self.get_output_variable().shape[-1]*3)
+        self.add_weights_variable(name='recurrent_bias', var_name='br{index}', data=recurrent_bias)
+
+    def function_cpp(self):
+        params = self._default_function_params()
+        params['w'] = self.get_weights('weight').name
+        params['b'] = self.get_weights('bias').name
+        params['wr'] = self.get_weights('recurrent_weight').name
+        params['br'] = self.get_weights('recurrent_bias').name
+        params['activation'] = self.get_attr('activation')
+        params['recurrent_activation'] = self.get_attr('recurrent_activation')
+
+        return [self._function_template.format(**params)]
+
+    def config_cpp(self):
+        params = self._default_config_params()
+        params['n_in'] = self.get_input_variable().dim_names[1]
+        params['n_sequence'] = self.get_input_variable().dim_names[0]
+        params['n_sequence_out'] = self.attributes['n_sequence_out']
+        params['n_state'] = self.get_output_variable().dim_names[1]
+        params['n_out'] = self.get_output_variable().dim_names[1]
+        params['nzeros'] = self.get_weights('weight').nzeros
+
+        params['config_mult_t1'] = 'config{}_mult1'.format(self.index)
+        params['config_mult_t2'] = 'config{}_mult2'.format(self.index)
+        params['gru_act_t'] = '{}_config{}_recr'.format(self.get_attr('recurrent_activation'), self.index)
+        params['act_t'] = '{}_config{}'.format(self.get_attr('activation'), self.index)
+        gru_config = self._config_template[0].format(**params)
+
+        gru_params = self._default_config_params()
+        gru_params['n_in'] = self.get_output_variable().dim_names[1] + ' * 2'
+        gru_act_config = self._config_template[2].format(**gru_params)
+
+        act_params = self._default_config_params()
+        act_params['n_in'] = self.get_output_variable().dim_names[1]
+        act_params['table_size'] = 1024
+        act_params['table_t'] = 'ap_fixed<18,8>'
+        act_config = self._config_template[3].format(**act_params)
+
+        mult_params1 = self._default_config_params()
+        mult_params2 = self._default_config_params()
+        mult_params1['n_in'] = self.get_input_variable().dim_names[1] # n_in -> n_in * 3
+        mult_params1['n_out'] = self.get_output_variable().dim_names[1] + ' * 3'
+        mult_params2['n_in'] = self.get_output_variable().dim_names[1] # n_state -> n_state *3
+        mult_params2['n_out'] = self.get_output_variable().dim_names[1] + ' * 3'
+
+        mult_config1 = self._config_template[1].format(**mult_params1)
+        mult_config2 = self._config_template[4].format(**mult_params2)
+
+        return mult_config1 + '\n' + mult_config2 + '\n' + gru_act_config + '\n' + act_config + '\n' + gru_config
+
 class Pooling1D(Layer):
     def initialize(self):
         if self.get_attr('data_format') == 'channels_last':
@@ -1797,6 +1943,8 @@ layer_map = {
     'Conv2D'                 : Conv2D,
     'BinaryConv2D'           : Conv2D,
     'QConv2D'                : Conv2D,
+    'LSTM'                   : LSTM,
+    'GRU'                    : GRU,
     'QConv2DBatchnorm'       : Conv2DBatchnorm,
     'SeparableConv1D'        : SeparableConv1D,
     'SeparableConv2D'        : SeparableConv2D,
