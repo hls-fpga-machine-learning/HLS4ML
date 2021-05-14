@@ -35,7 +35,7 @@ register_layer('SingleOutputConv2D', SingleOutputConv2D)
 register_layer('SingleOutputConv2DBatchnorm', SingleOutputConv2DBatchnorm)
 
 # Register the templates for config and function                                                                                
-for backend in ['Vivado', 'Pynq']:
+for backend in ['Vivado']:
     templates.get_backend(backend).register_templates(
         'SingleOutputConv1D',
         single_out_conv1d_function_template,
