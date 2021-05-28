@@ -62,5 +62,47 @@ void conv_2d_cl(
     }
 }
 
+template<class data_T, class res_T, typename CONFIG_T>
+void single_output_conv_2d_cl(
+    hls::stream<data_T> &data,
+    hls::stream<res_T>  &res,
+    typename CONFIG_T::weight_t weights[CONFIG_T::filt_height * CONFIG_T::filt_width * CONFIG_T::n_chan * CONFIG_T::n_filt],
+    typename CONFIG_T::bias_t   biases[CONFIG_T::n_filt])
+{
+    assert(CONFIG_T::pad_top == 0 && CONFIG_T::pad_bottom == 0 && CONFIG_T::pad_left == 0 && CONFIG_T::pad_right == 0);
+    assert(CONFIG_T::filt_height == CONFIG_T::in_height && CONFIG_T::filt_width == CONFIG_T::in_width);
+    assert(CONFIG_T::out_height == 1 && CONFIG_T::out_width == 1);
+
+    typename data_T::value_type data_window[CONFIG_T::filt_height * CONFIG_T::filt_width * CONFIG_T::n_chan];
+    #pragma HLS ARRAY_PARTITION variable=data_window complete
+    typename res_T::value_type res_elem[CONFIG_T::n_filt];
+    #pragma HLS ARRAY_PARTITION variable=res_elem complete
+    res_T res_pack;
+    #pragma HLS DATA_PACK variable=res_pack
+
+    ReadInputImage: for (unsigned i = 0; i < CONFIG_T::in_height * CONFIG_T::in_width; i++) {
+        #pragma HLS PIPELINE
+        data_T in_elem = data.read();
+        CopyDataChan: for (unsigned c = 0; c < CONFIG_T::n_chan; c++) {
+            #pragma HLS UNROLL
+            data_window[i * CONFIG_T::n_chan + c] = in_elem[c];
+        }
+    }
+
+    #pragma HLS INLINE region
+    if (CONFIG_T::strategy == nnet::latency) {
+        dense_latency<typename data_T::value_type, typename res_T::value_type, typename CONFIG_T::mult_config>(data_window, res_elem, weights, biases);
+    } else {
+        dense_resource<typename data_T::value_type, typename res_T::value_type, typename CONFIG_T::mult_config>(data_window, res_elem, weights, biases);
+    }
+
+    CastLoop: for (unsigned jj = 0; jj < CONFIG_T::n_filt; jj++) {
+        #pragma HLS UNROLL
+        res_pack[jj] = res_elem[jj];
+    }
+
+    res.write(res_pack);
+}
+
 }
 #endif
