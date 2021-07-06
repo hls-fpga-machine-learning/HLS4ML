@@ -39,7 +39,7 @@ void depthwise_conv_1d_encoded_cl(
             #pragma HLS PIPELINE II=CONFIG_T::reuse_factor
         }
         compute_scaled_indices_1d<data_T, CONFIG_T>(i_iw, pixel_idx);
-        compute_depthwise_output<data_T, res_T, CONFIG_T>(data.read(), data_window, res, res_pack, outputs_ready, weights, biases, pixel_idx);
+        compute_depthwise_output_encoded<data_T, res_T, CONFIG_T>(data.read(), data_window, res, res_pack, outputs_ready, weights, biases, pixel_idx);
     }
 }
 
@@ -57,7 +57,7 @@ void depthwise_conv_1d_buffer_cl(
         if (CONFIG_T::strategy == nnet::latency) {
             #pragma HLS PIPELINE II=CONFIG_T::reuse_factor
         }
-        compute_1d_depthwise_output<data_T, res_T, CONFIG_T>(data.read(), res, weights, biases);
+        compute_depthwise_output_buffer_1d<data_T, res_T, CONFIG_T>(data.read(), res, weights, biases);
     }
 }
 
