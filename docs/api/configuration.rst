@@ -68,7 +68,7 @@ It looks like this:
    XilinxPart: xcku115-flvb2104-2-i
    ClockPeriod: 5
 
-   IOType: io_parallel # options: io_serial/io_parallel
+   IOType: io_parallel # options: io_parallel/io_stream
    HLSConfig:
      Model:
        Precision: ap_fixed<16,6>
@@ -91,7 +91,7 @@ There are a number of configuration options that you have.  Let's go through the
 * **XilinxPart**\ : the particular FPGA part number that you are considering, here it's a Xilinx Virtex-7 FPGA
 * **ClockPeriod**\ : the clock period, in ns, at which your algorithm runs
   Then you have some optimization parameters for how your algorithm runs:
-* **IOType**\ : your options are ``io_parallel`` or ``io_serial`` where this really defines if you are pipelining your algorithm or not
+* **IOType**\ : your options are ``io_parallel`` or ``io_stream`` where this really defines if you are pipelining your algorithm or not. ``io_stream`` is used for CNN streaming architecture. For more information on streaming see `this PR <https://github.com/fastmachinelearning/hls4ml/pull/220>`__.
 * **ReuseFactor**\ : in the case that you are pipelining, this defines the pipeline interval or initiation interval
 * **Strategy**\ : Optimization strategy on FPGA, either "Latency" or "Resource". If none is supplied then hl4ml uses "Latency" as default. Note that a reuse factor larger than 1 should be specified when using "resource" strategy. An example of using larger reuse factor can be found `here. <https://github.com/hls-fpga-machine-learning/models/tree/master/keras/KERAS_dense>`__
 * **Precision**\ : this defines the precsion of your inputs, outputs, weights and biases. It is denoted by ``ap_fixed<X,Y>``\ , where ``Y`` is the number of bits representing the signed number above the binary point (i.e. the integer part), and ``X`` is the total number of bits.
