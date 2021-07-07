@@ -41,3 +41,5 @@ void myproject(
 
     //hls-fpga-machine-learning insert layers
 }
+
+//hls-fpga-machine-learning insert functions

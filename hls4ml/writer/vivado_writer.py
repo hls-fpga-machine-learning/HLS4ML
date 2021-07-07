@@ -13,6 +13,31 @@ from hls4ml.model.hls_layers import XnorPrecisionType
 
 config_filename = 'hls4ml_config.yml'
 
+# --------------------------------
+# start of proof of principle hack
+function_definition_map = {'Dense' : 'void {name}({input_t}* {input}, {output_t}* {output}, {weight_t}* {w}, {bias_t}* {b})',
+                           'Activation' : 'void {name}({input_t}* {input}, {output_t}* {output})',
+                           'Softmax' : 'void {name}({input_t}* {input}, {output_t}* {output})'}        
+
+def fill_dense_template(layer):
+    template = function_definition_map['Dense']
+    params = layer._default_function_params()
+    params['w'] = layer.get_weights('weight').name
+    params['b'] = layer.get_weights('bias').name
+    params['name'] = layer.name
+    params.update(layer._default_config_params())
+    return template.format(**params)
+
+def fill_activation_template(layer):
+    template = function_definition_map[layer.__class__.__name__]
+    params = layer._default_function_params()
+    params['name'] = layer.name
+    return template.format(**params)
+
+function_definition = {'Dense' : fill_dense_template, 'Activation' : fill_activation_template, 'Softmax' : fill_activation_template}
+# end of proof of principle hack
+# ------------------------------
+
 class VivadoWriter(Writer):
 
     def type_definition_cpp(self, model, atype):
@@ -229,19 +254,28 @@ class VivadoWriter(Writer):
                                     newline += '    ' + self._make_stable_pragma(var) + '\n'
                     func = layer.function_cpp()
                     if func:
-                        if len(func) == 1:
-                            newline += '    ' + func[0] + ' // ' + layer.name + '\n'
-                        else:
-                            newline += '// ' + layer.name + '\n'
-                            for line in func:
-                                newline += '    ' + line + '\n'
+                        args = func[0].split('(')[1].split(')')[0]
+                        newline += '    ' + layer.name + '(' + args + ');\n'
                         if model.config.trace_output and layer.get_attr('Trace', False):
                             newline += '#ifndef __SYNTHESIS__\n'
                             for var in vars:
                                 newline += '    nnet::save_layer_output<{}>({}, "{}", {});\n'.format(var.type.name, var.name, layer.name, var.size_cpp())
                             newline += '#endif\n'
                         newline += '\n'
-
+            elif '//hls-fpga-machine-learning insert functions' in line:
+                for layer in model.get_layers():
+                    func = layer.function_cpp()
+                    if func:
+                        definition = function_definition[layer.__class__.__name__](layer)
+                        newline += definition + '{\n'
+                        newline += '    #pragma HLS inline off\n'
+                        if len(func) == 1:
+                            newline += '    ' + func[0] + ' // ' + layer.name + '\n'
+                        else:
+                            newline += '// ' + layer.name + '\n'
+                            for line in func:
+                                newline += '    ' + line + '\n'
+                        newline += '}\n'
             #Just copy line
             else:
                 newline = line
@@ -255,6 +289,7 @@ class VivadoWriter(Writer):
         #######################
         ## myproject.h
         #######################
+
 
         filedir = os.path.dirname(os.path.abspath(__file__))
         f = open(os.path.join(filedir,'../templates/vivado/firmware/myproject.h'),'r')
@@ -286,6 +321,13 @@ class VivadoWriter(Writer):
                     newline += brams_str + ',\n'
                 newline += indent + insize_str + ',\n'
                 newline += indent + outsize_str + '\n'
+
+            elif '//hls-fpga-machine-learning insert functions' in line:
+                for layer in model.get_layers():
+                    func = layer.function_cpp()
+                    if func:
+                        definition = function_definition[layer.__class__.__name__](layer)
+                        newline += definition + ';\n'
             else:
                 newline = line
             fout.write(newline)

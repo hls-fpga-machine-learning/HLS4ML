@@ -31,4 +31,6 @@ void myproject(
     //hls-fpga-machine-learning insert header
 );
 
+//hls-fpga-machine-learning insert functions
+
 #endif
