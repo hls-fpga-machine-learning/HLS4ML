@@ -13,7 +13,7 @@ enum class conv_implementation { linebuffer=0, encoded=1};
 //       Encoded Implementation (Vlad's)
 // *************************************************
 template<unsigned K, unsigned S, unsigned W>
-unsigned scale_index(const unsigned idx) {
+unsigned scale_index_K_gte_S(const unsigned idx) {
     #pragma HLS INLINE
 
     if (idx < K - S) {
@@ -32,6 +32,39 @@ unsigned scale_index(const unsigned idx) {
     }
 
     return K - S + (idx - (K - S)) % S;
+}
+
+template<unsigned K, unsigned S, unsigned W>
+unsigned scale_index_K_lt_S(const unsigned idx) {
+    #pragma HLS INLINE
+
+    if (idx < S - K) {
+        return idx;
+    }
+
+    constexpr unsigned nW = ((W - K) / S) * S + K; // Nearest W without unused pixels on the right
+    constexpr unsigned sW = (DIV_ROUNDUP(S, K) - 1) * S + K; // Scaled W that behaves like original W
+    if (idx >= nW) {
+        return sW;
+    }
+
+    const unsigned r = nW - idx;
+    if (r <= S - K) {
+        return sW - r;
+    }
+
+    return S - K + (idx - (S - K)) % S;
+}
+
+template<unsigned K, unsigned S, unsigned W>
+unsigned scale_index(const unsigned idx) {
+    #pragma HLS INLINE
+    
+    if (K >= S) {
+        return scale_index_K_gte_S<K, S, W>(idx);
+    } else {
+        return scale_index_K_lt_S<K, S, W>(idx);
+    }
 }
 
 template<class data_T, class res_T, typename CONFIG_T>

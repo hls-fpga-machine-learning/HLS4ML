@@ -16,7 +16,6 @@ void depthwise_conv_1d_encoded_cl(
     typename CONFIG_T::bias_t   biases[CONFIG_T::n_chan])
 {
     assert(CONFIG_T::pad_left == 0 && CONFIG_T::pad_right == 0);
-    assert(CONFIG_T::stride_width <= CONFIG_T::filt_width);
 
     hls::stream<typename data_T::value_type> data_window[CONFIG_T::filt_width * CONFIG_T::n_chan];
     const int win_depth = CONFIG_T::out_width;

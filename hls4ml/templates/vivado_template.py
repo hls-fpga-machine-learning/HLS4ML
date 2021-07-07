@@ -560,7 +560,11 @@ class VivadoBackend(Backend):
         # Current limitations
         assert pad == 0
 
-        min_W = (math.ceil(kernel_size / stride) - 1) * stride + kernel_size
+        if kernel_size >= stride:
+            min_W = (math.ceil(kernel_size / stride) - 1) * stride + kernel_size
+        else:
+            min_W = (math.ceil(stride / kernel_size) - 1) * stride + kernel_size
+
         min_oW = int((min_W - kernel_size) // stride + 1)
 
         out_W = int((in_W - kernel_size) // stride + 1)
@@ -604,8 +608,16 @@ class VivadoBackend(Backend):
         assert stride_height == stride_width
         assert pad == 0
 
-        min_H = (math.ceil(kernel_height / stride_height) - 1) * stride_height + kernel_height
-        min_W = (math.ceil(kernel_width / stride_width) - 1) * stride_width + kernel_width
+        if kernel_height >= stride_height:
+            min_H = (math.ceil(kernel_height / stride_height) - 1) * stride_height + kernel_height
+        else:
+            min_H = (math.ceil(stride_height / kernel_height) - 1) * stride_height + kernel_height
+        
+        if kernel_width >= stride_width:
+            min_W = (math.ceil(kernel_width / stride_width) - 1) * stride_width + kernel_width
+        else:
+            min_W = (math.ceil(stride_width / kernel_width) - 1) * stride_width + kernel_width
+
         min_oH = int((min_H - kernel_height) // stride_height + 1)
         min_oW = int((min_W - kernel_width) // stride_width + 1)
 
