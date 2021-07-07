@@ -1403,9 +1403,12 @@ class Merge(Layer):
         assert(len(self.inputs) == 2)
         inp1 = self.get_input_variable(self.inputs[0])
         inp2 = self.get_input_variable(self.inputs[1])
-        shape = inp1.shape
-        assert(inp1.shape == inp2.shape)
-        dims = inp1.dim_names
+        if np.prod(inp2.shape) > np.prod(inp1.shape):
+            shape = inp2.shape
+            dims = inp2.dim_names
+        else:
+            shape = inp1.shape
+            dims = inp1.dim_names
         self.add_output_variable(shape, dims)
 
     def function_cpp(self):
@@ -1423,7 +1426,12 @@ class Merge(Layer):
 
     def config_cpp(self):
         params = self._default_config_params()
-        params['n_elem'] = self.get_input_variable(self.inputs[0]).size_cpp()
+        inp1 = self.get_input_variable(self.inputs[0])
+        inp2 = self.get_input_variable(self.inputs[1])
+        if np.prod(inp2.shape) > np.prod(inp1.shape):
+            params['n_elem'] = inp2.size_cpp()
+        else:
+            params['n_elem'] = inp1.size_cpp()
 
         return self._config_template.format(**params)
 
