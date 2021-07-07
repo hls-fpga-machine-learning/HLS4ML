@@ -47,6 +47,16 @@ class weight_binary : public Product<x_T, w_T, y_T>{
 };
 
 template<class x_T, class w_T, class y_T>
+class data_binary : public Product<x_T, w_T, y_T>{
+    public:
+    static y_T product(x_T a, w_T w){
+        // Specialisation for 1-bit data, arbitrary weight
+        #pragma HLS INLINE
+        return a == 0 ? (w_T) -w : w;
+    }
+};
+
+template<class x_T, class w_T, class y_T>
 class weight_ternary : public Product<x_T, w_T, y_T>{
     public:
     static y_T product(x_T a, w_T w){
@@ -79,8 +89,7 @@ class weight_exponential : public Product<x_T, w_T, y_T>{
         // Shift product for exponential weights
         #pragma HLS INLINE
         // shift by the exponent. Negative weights shift right
-        y_T ay = a;
-        y_T y = ay << w.weight;
+        y_T y = a << w.weight;
         // negate or not depending on weight sign
         return w.sign == 1 ? (y_T) y : (y_T) -y;
     }
@@ -93,6 +102,13 @@ inline typename std::enable_if<std::is_same<data_T, ap_uint<1>>::value
         && std::is_same<typename CONFIG_T::weight_t, ap_uint<1>>::value, ap_int<nnet::ceillog2(CONFIG_T::n_in) + 2>>::type
 cast(typename CONFIG_T::accum_t x){
   return (ap_int<nnet::ceillog2(CONFIG_T::n_in) + 2>) (x - CONFIG_T::n_in / 2) * 2;
+}
+
+template<class data_T, class res_T, typename CONFIG_T>
+inline typename std::enable_if<std::is_same<data_T, ap_uint<1>>::value
+        && ! std::is_same<typename CONFIG_T::weight_t, ap_uint<1>>::value, res_T>::type
+cast(typename CONFIG_T::accum_t x){
+  return (res_T) x;
 }
 
 template<class data_T, class res_T, typename CONFIG_T>

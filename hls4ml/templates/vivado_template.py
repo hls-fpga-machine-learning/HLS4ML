@@ -398,6 +398,7 @@ class VivadoBackend(Backend):
         self.register_templates('ParametrizedActivation' , param_activ_function_template, activ_config_template, activ_include_list)
         self.register_templates('PReLU'                  , param_activ_function_template, activ_config_template, activ_include_list)
         self.register_templates('Softmax'                , activ_function_template,       softmax_config_template, activ_include_list)
+        self.register_templates('TernaryTanh'            , activ_function_template,       activ_config_template, activ_include_list)
         self.register_templates('Pooling1D'              , pooling1d_function_template,   pooling1d_config_template, pooling_include_list)
         self.register_templates('Pooling2D'              , pooling2d_function_template,   pooling2d_config_template, pooling_include_list)
         self.register_templates('GlobalPooling1D'        , global_pooling1d_function_template,   global_pooling1d_config_template, pooling_include_list)
@@ -549,6 +550,8 @@ class VivadoBackend(Backend):
                 product = 'both_binary'
             elif isinstance(weight_T, XnorPrecisionType): # data is not xnor-binary
                 product = 'weight_binary'
+            elif isinstance(data_T, XnorPrecisionType): # data is xnor, weight is not
+                product = 'data_binary'
             elif isinstance(weight_T, IntegerPrecisionType) and weight_T.width == 2 and weight_T.signed:
                 product = 'weight_ternary'
             else:
