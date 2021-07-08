@@ -366,7 +366,6 @@ class HLSModel(object):
             if o in self.outputs:
                 out_var.type.name = 'result_t'
             self.output_vars[o] = out_var
-
         return node
 
     def insert_node(self, node, before=None):
@@ -441,6 +440,11 @@ class HLSModel(object):
                         raise Exception('Cannot rewire a node without child')
             else:
                 raise Exception('Cannot rewire a node without a parent')
+        
+        #If it's the output layer then reset the output to this node's input
+        if node.name in self.outputs:
+            node_indx = self.outputs.index(node.name)
+            self.outputs[node_indx] = node.inputs[0]
 
         del self.output_vars[node.outputs[0]]
         del self.graph[node.name]

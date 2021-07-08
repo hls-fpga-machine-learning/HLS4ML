@@ -1513,14 +1513,24 @@ class Transpose(Layer):
         self.set_attr('dim', '{}d'.format(len(inp.shape)))
         if len(perm) == 4 and perm[0] == 0:
             perm = [i - 1 for i in perm[1:]]
-        shape = [inp.shape[i] for i in perm]
+        
+        #ONNX double transpose specific, input dimension might
+        #be 1 but perm has dimension 2
+        #It will be optimized away later
+        if len(inp.shape) == 1 and len(perm) == 2:
+            shape = inp.shape #dummy shape
+            dims = ['DUMMY'] #dummy dims
+            self.set_attr('perm', [0])
+        else:
+            shape = [inp.shape[i] for i in perm]
+
         self.set_attr('perm_str', ','.join([str(i) for i in perm]))
         if len(shape) == 2:
             dims = ['OUT_HEIGHT_{}'.format(self.index), 'OUT_WIDTH_{}'.format(self.index)]
             self.set_attr('depth', 1)
             self.set_attr('height', shape[0])
             self.set_attr('width', shape[1])
-        else:
+        elif len(shape) > 2:
             dims = ['OUT_DEPTH_{}'.format(self.index), 'OUT_HEIGHT_{}'.format(self.index), 'OUT_WIDTH_{}'.format(self.index)]
             self.set_attr('depth', shape[0])
             self.set_attr('height', shape[1])

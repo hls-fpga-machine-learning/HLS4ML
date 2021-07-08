@@ -12,6 +12,7 @@ from hls4ml.model.optimizer.passes.conv_same_pad import InsertZeroPaddingBeforeC
 from hls4ml.model.optimizer.passes.pointwise import OptimizePointwiseConv
 from hls4ml.model.optimizer.passes.clone import CloneOutput
 from hls4ml.model.optimizer.passes.repack_stream import ReshapeStream
+from hls4ml.model.optimizer.passes.transpose_opt import RemoveUselessTranspose
 
 try:
     from hls4ml.model.optimizer.passes.qkeras import OutputRoundingSaturationMode
@@ -31,6 +32,7 @@ register_pass('conv2d_same_pad', InsertZeroPaddingBeforeConv2D)
 register_pass('optimize_pointwise_conv', OptimizePointwiseConv)
 register_pass('clone_output', CloneOutput)
 register_pass('reshape_stream', ReshapeStream)
+register_pass('remove_useless_transpose', RemoveUselessTranspose)
 
 if __qkeras_optimizers__:
     register_pass('output_rounding_saturation_mode', OutputRoundingSaturationMode)
